@@ -11,31 +11,51 @@ import qrcode
 from PIL.ImageQt import ImageQt
 
 from PySide6.QtCore import (
-    Qt, QTimer, QPropertyAnimation, QEasingCurve, QProcess
+    Qt,
+    QTimer,
+    QPropertyAnimation,
+    QEasingCurve,
+    QProcess
 )
+
 from PySide6.QtGui import QPixmap
+
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-    QVBoxLayout, QHBoxLayout, QFrame, QGridLayout,
-    QMessageBox, QGraphicsOpacityEffect
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFrame,
+    QGridLayout,
+    QMessageBox,
+    QGraphicsOpacityEffect,
+    QComboBox
 )
 
 from urllib.parse import quote
+
 import main as remote_server
 
 
 def local_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
     try:
         sock.connect(("192.0.2.1", 80))
         return sock.getsockname()[0]
+
     except OSError:
         return "127.0.0.1"
+
     finally:
         sock.close()
 
 
 class RemoteTouchApp(QMainWindow):
+
     def __init__(self):
         super().__init__()
 
@@ -47,8 +67,8 @@ class RemoteTouchApp(QMainWindow):
         self.internet_address = ""
 
         self.setWindowTitle("RemoteTouch")
-        self.setMinimumSize(820, 700)
-        self.resize(980, 780)
+        self.setMinimumSize(820, 740)
+        self.resize(980, 850)
 
         self.setStyleSheet("""
             QWidget {
@@ -183,6 +203,28 @@ class RemoteTouchApp(QMainWindow):
                 border-radius: 14px;
                 padding: 10px;
             }
+
+            QComboBox {
+                background: #0b1527;
+                color: white;
+                border: 1px solid #29466b;
+                border-radius: 9px;
+                padding: 11px;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            QComboBox:hover {
+                border: 1px solid #3b82f6;
+            }
+
+            QComboBox QAbstractItemView {
+                background: #17243a;
+                color: white;
+                selection-background-color: #2563eb;
+                border: 1px solid #29466b;
+                padding: 5px;
+            }
         """)
 
         root = QWidget()
@@ -205,7 +247,7 @@ class RemoteTouchApp(QMainWindow):
         brand = QLabel("RemoteTouch")
         brand.setObjectName("brand")
 
-        version = QLabel("DESKTOP CONTROL CENTER  •  0.7.1")
+        version = QLabel("DESKTOP CONTROL CENTER  •  0.9.0")
         version.setObjectName("version")
 
         brand_col.addWidget(brand)
@@ -218,17 +260,20 @@ class RemoteTouchApp(QMainWindow):
         self.status.setObjectName("status")
 
         h.addWidget(self.status, alignment=Qt.AlignVCenter)
+
         layout.addWidget(header)
 
         intro = QLabel(
             "Управляй компьютером с телефона — локально или через интернет"
         )
         intro.setObjectName("muted")
+
         layout.addWidget(intro)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(16)
+
         layout.addLayout(grid, 1)
 
         # Левая карточка
@@ -241,6 +286,7 @@ class RemoteTouchApp(QMainWindow):
 
         title = QLabel("Панель управления")
         title.setObjectName("section")
+
         cl.addWidget(title)
 
         desc = QLabel(
@@ -248,18 +294,64 @@ class RemoteTouchApp(QMainWindow):
         )
         desc.setObjectName("muted")
         desc.setWordWrap(True)
+
         cl.addWidget(desc)
 
-        self.start_btn = QPushButton("▶   ЗАПУСТИТЬ УПРАВЛЕНИЕ")
+        self.start_btn = QPushButton(
+            "▶   ЗАПУСТИТЬ УПРАВЛЕНИЕ"
+        )
         self.start_btn.setObjectName("start")
         self.start_btn.clicked.connect(self.start_server)
+
         cl.addWidget(self.start_btn)
 
-        self.stop_btn = QPushButton("■   ОСТАНОВИТЬ СЕРВЕР")
+        self.stop_btn = QPushButton(
+            "■   ОСТАНОВИТЬ СЕРВЕР"
+        )
         self.stop_btn.setObjectName("stop")
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop_server)
+
         cl.addWidget(self.stop_btn)
+
+        # Выбор режима
+        mode_title = QLabel("⚙  РЕЖИМ ПРОИЗВОДИТЕЛЬНОСТИ")
+        mode_title.setStyleSheet(
+            "font-size: 13px; font-weight: 700; color: #7dd3fc;"
+        )
+
+        cl.addWidget(mode_title)
+
+        self.mode_combo = QComboBox()
+
+        self.mode_combo.addItem(
+            "Авто — локально / интернет",
+            "auto"
+        )
+
+        self.mode_combo.addItem(
+            "Локальный — максимум качества",
+            "local"
+        )
+
+        self.mode_combo.addItem(
+            "Сетевой — минимум задержки",
+            "network"
+        )
+
+        self.mode_combo.currentIndexChanged.connect(
+            self.change_mode
+        )
+
+        cl.addWidget(self.mode_combo)
+
+        self.mode_description = QLabel(
+            "Авто: при включённом Funnel используется сетевой режим."
+        )
+        self.mode_description.setObjectName("muted")
+        self.mode_description.setWordWrap(True)
+
+        cl.addWidget(self.mode_description)
 
         self.internet_btn = QPushButton(
             "🌐   ОТКРЫТЬ ДОСТУП ИЗ ИНТЕРНЕТА"
@@ -267,6 +359,7 @@ class RemoteTouchApp(QMainWindow):
         self.internet_btn.setObjectName("internet")
         self.internet_btn.setEnabled(False)
         self.internet_btn.clicked.connect(self.start_funnel)
+
         cl.addWidget(self.internet_btn)
 
         self.stop_internet_btn = QPushButton(
@@ -275,27 +368,31 @@ class RemoteTouchApp(QMainWindow):
         self.stop_internet_btn.setObjectName("internet_stop")
         self.stop_internet_btn.setEnabled(False)
         self.stop_internet_btn.clicked.connect(self.stop_funnel)
+
         cl.addWidget(self.stop_internet_btn)
 
         cl.addSpacing(6)
 
         cl.addWidget(
             self.make_info(
-                "●", "Мышь и удержание кнопок",
+                "●",
+                "Мышь и удержание кнопок",
                 "ЛКМ, ПКМ и прокрутка"
             )
         )
 
         cl.addWidget(
             self.make_info(
-                "⌨", "Полноценная клавиатура",
+                "⌨",
+                "Полноценная клавиатура",
                 "RU / EN, Shift, Ctrl, Tab и другие"
             )
         )
 
         cl.addWidget(
             self.make_info(
-                "🎮", "Игровой режим",
+                "🎮",
+                "Игровой режим",
                 "Поворот камеры и настройка чувствительности"
             )
         )
@@ -312,6 +409,7 @@ class RemoteTouchApp(QMainWindow):
 
         rtitle = QLabel("Подключение телефона")
         rtitle.setObjectName("section")
+
         rl.addWidget(rtitle)
 
         self.qr_label = QLabel("Сначала запусти сервер")
@@ -327,22 +425,28 @@ class RemoteTouchApp(QMainWindow):
             }
         """)
 
-        rl.addWidget(self.qr_label, alignment=Qt.AlignCenter)
+        rl.addWidget(
+            self.qr_label,
+            alignment=Qt.AlignCenter
+        )
 
         hint = QLabel("Отсканируй QR-код камерой телефона")
         hint.setObjectName("muted")
         hint.setAlignment(Qt.AlignCenter)
+
         rl.addWidget(hint)
 
         self.url_label = QLabel("http://—:8765")
         self.url_label.setObjectName("url")
         self.url_label.setAlignment(Qt.AlignCenter)
         self.url_label.setWordWrap(True)
+
         rl.addWidget(self.url_label)
 
         self.pin_label = QLabel("PIN: —")
         self.pin_label.setObjectName("pin")
         self.pin_label.setAlignment(Qt.AlignCenter)
+
         rl.addWidget(self.pin_label)
 
         buttons = QHBoxLayout()
@@ -359,6 +463,7 @@ class RemoteTouchApp(QMainWindow):
         buttons.addWidget(self.open_btn)
 
         rl.addLayout(buttons)
+
         grid.addWidget(connect, 0, 1)
 
         footer = QLabel(
@@ -366,8 +471,10 @@ class RemoteTouchApp(QMainWindow):
             "в одной Wi-Fi сети. Для доступа из интернета используется "
             "Tailscale Funnel. Не отправляй PIN посторонним."
         )
+
         footer.setObjectName("muted")
         footer.setWordWrap(True)
+
         layout.addWidget(footer)
 
         # Анимация появления
@@ -382,13 +489,19 @@ class RemoteTouchApp(QMainWindow):
             widget.setGraphicsEffect(effect)
             effect.setOpacity(0.0)
 
-            anim = QPropertyAnimation(effect, b"opacity", self)
+            anim = QPropertyAnimation(
+                effect,
+                b"opacity",
+                self
+            )
+
             anim.setDuration(700)
             anim.setStartValue(0.0)
             anim.setEndValue(1.0)
             anim.setEasingCurve(QEasingCurve.OutCubic)
 
             self.animations.append(anim)
+
             QTimer.singleShot(delay, anim.start)
 
         # Пульсация статуса
@@ -397,8 +510,11 @@ class RemoteTouchApp(QMainWindow):
         self.status_effect.setOpacity(1.0)
 
         self.pulse = QPropertyAnimation(
-            self.status_effect, b"opacity", self
+            self.status_effect,
+            b"opacity",
+            self
         )
+
         self.pulse.setDuration(1100)
         self.pulse.setStartValue(1.0)
         self.pulse.setKeyValueAt(0.5, 0.55)
@@ -409,10 +525,12 @@ class RemoteTouchApp(QMainWindow):
 
     def make_info(self, symbol, title, subtitle):
         row = QWidget()
+
         lay = QHBoxLayout(row)
         lay.setContentsMargins(0, 5, 0, 5)
 
         icon = QLabel(symbol)
+
         icon.setStyleSheet(
             "font-size: 20px; color: #67e8f9; min-width: 28px;"
         )
@@ -420,7 +538,9 @@ class RemoteTouchApp(QMainWindow):
         col = QVBoxLayout()
 
         t = QLabel(title)
-        t.setStyleSheet("font-weight: 700; font-size: 13px;")
+        t.setStyleSheet(
+            "font-weight: 700; font-size: 13px;"
+        )
 
         s = QLabel(subtitle)
         s.setObjectName("muted")
@@ -434,15 +554,38 @@ class RemoteTouchApp(QMainWindow):
 
         return row
 
+    # Переключение режима
+    def change_mode(self):
+        mode = self.mode_combo.currentData()
+
+        remote_server.set_mode(
+            mode,
+            funnel=bool(self.internet_address)
+        )
+
+        descriptions = {
+            "auto": (
+                "Авто: при включённом Funnel используется сетевой режим."
+            ),
+            "local": (
+                "Локальный: 1280×720, качество 75, до 24 FPS."
+            ),
+            "network": (
+                "Сетевой: 640×360, качество 45, до 12 FPS."
+            )
+        }
+
+        self.mode_description.setText(
+            descriptions.get(mode, "")
+        )
+
     # Запуск локального сервера
     def start_server(self):
         if self.httpd:
             return
 
         try:
-            from http.server import ThreadingHTTPServer
-
-            self.httpd = ThreadingHTTPServer(
+            self.httpd = remote_server.ThreadingHTTPServer(
                 ("0.0.0.0", remote_server.PORT),
                 remote_server.Handler
             )
@@ -453,7 +596,13 @@ class RemoteTouchApp(QMainWindow):
                 target=self.httpd.serve_forever,
                 daemon=True
             )
+
             self.server_thread.start()
+
+            remote_server.set_mode(
+                self.mode_combo.currentData(),
+                funnel=False
+            )
 
             ip = local_ip()
 
@@ -463,7 +612,9 @@ class RemoteTouchApp(QMainWindow):
             )
 
             self.url_label.setText(self.address)
-            self.pin_label.setText(f"PIN: {remote_server.PIN}")
+            self.pin_label.setText(
+                f"PIN: {remote_server.PIN}"
+            )
 
             self.set_qr(self.address)
 
@@ -481,6 +632,7 @@ class RemoteTouchApp(QMainWindow):
         except OSError as e:
             if self.httpd:
                 self.httpd.server_close()
+
             self.httpd = None
 
             QMessageBox.critical(
@@ -528,10 +680,13 @@ class RemoteTouchApp(QMainWindow):
             return
 
         self.funnel_process = QProcess(self)
+
         self.funnel_process.setProgram(tailscale)
+
         self.funnel_process.setArguments(
             ["funnel", str(remote_server.PORT)]
         )
+
         self.funnel_process.setProcessChannelMode(
             QProcess.MergedChannels
         )
@@ -547,14 +702,20 @@ class RemoteTouchApp(QMainWindow):
         self.internet_btn.setEnabled(False)
         self.internet_btn.setText("⏳   ПОДКЛЮЧЕНИЕ...")
 
-        self.status.setText("●  Подключение к Tailscale...")
+        self.status.setText(
+            "●  Подключение к Tailscale..."
+        )
+
         self.status.setStyleSheet(
             "color: #fbbf24; font-size: 13px; font-weight: 700;"
         )
 
         self.funnel_process.start()
 
-        QTimer.singleShot(10000, self.check_funnel_start)
+        QTimer.singleShot(
+            10000,
+            self.check_funnel_start
+        )
 
     def check_funnel_start(self):
         if (
@@ -564,6 +725,7 @@ class RemoteTouchApp(QMainWindow):
             and self.httpd
         ):
             self.internet_btn.setEnabled(True)
+
             self.internet_btn.setText(
                 "🌐   ОТКРЫТЬ ДОСТУП ИЗ ИНТЕРНЕТА"
             )
@@ -598,21 +760,35 @@ class RemoteTouchApp(QMainWindow):
                 + quote(remote_server.PIN)
             )
 
-            self.url_label.setText(self.internet_address)
+            remote_server.set_mode(
+                self.mode_combo.currentData(),
+                funnel=True
+            )
+
+            self.url_label.setText(
+                self.internet_address
+            )
+
             self.set_qr(self.internet_address)
 
-            self.internet_btn.setText("✓   ИНТЕРНЕТ ДОСТУПЕН")
-            self.internet_btn.setEnabled(False)
+            self.internet_btn.setText(
+                "✓   ИНТЕРНЕТ ДОСТУПЕН"
+            )
 
+            self.internet_btn.setEnabled(False)
             self.stop_internet_btn.setEnabled(True)
 
-            self.copy_btn.setText("⧉  Копировать ссылку")
+            self.copy_btn.setText(
+                "⧉  Копировать ссылку"
+            )
+
             self.copy_btn.setEnabled(True)
             self.open_btn.setEnabled(True)
 
             self.status.setText(
                 "●  Сервер доступен из интернета"
             )
+
             self.status.setStyleSheet(
                 "color: #86efac; font-size: 13px; font-weight: 700;"
             )
@@ -620,6 +796,11 @@ class RemoteTouchApp(QMainWindow):
     # Завершение Funnel
     def on_funnel_finished(self, exit_code, exit_status):
         self.internet_address = ""
+
+        remote_server.set_mode(
+            self.mode_combo.currentData(),
+            funnel=False
+        )
 
         self.stop_internet_btn.setEnabled(False)
         self.internet_btn.setEnabled(bool(self.httpd))
@@ -632,7 +813,10 @@ class RemoteTouchApp(QMainWindow):
             self.url_label.setText(self.address)
             self.set_qr(self.address)
 
-            self.status.setText("●  Сервер работает (локально)")
+            self.status.setText(
+                "●  Сервер работает (локально)"
+            )
+
             self.status.setStyleSheet(
                 "color: #86efac; font-size: 13px; font-weight: 700;"
             )
@@ -653,6 +837,11 @@ class RemoteTouchApp(QMainWindow):
 
         self.internet_address = ""
 
+        remote_server.set_mode(
+            self.mode_combo.currentData(),
+            funnel=False
+        )
+
         self.stop_internet_btn.setEnabled(False)
         self.internet_btn.setEnabled(bool(self.httpd))
 
@@ -664,14 +853,21 @@ class RemoteTouchApp(QMainWindow):
             self.url_label.setText(self.address)
             self.set_qr(self.address)
 
-            self.status.setText("●  Сервер работает")
+            self.status.setText(
+                "●  Сервер работает"
+            )
+
             self.status.setStyleSheet(
                 "color: #86efac; font-size: 13px; font-weight: 700;"
             )
 
     # Создание QR-кода
     def set_qr(self, text):
-        qr = qrcode.QRCode(box_size=7, border=2)
+        qr = qrcode.QRCode(
+            box_size=7,
+            border=2
+        )
+
         qr.add_data(text)
         qr.make(fit=True)
 
@@ -708,11 +904,15 @@ class RemoteTouchApp(QMainWindow):
 
         QApplication.clipboard().setText(link)
 
-        self.copy_btn.setText("✓  Ссылка скопирована")
+        self.copy_btn.setText(
+            "✓  Ссылка скопирована"
+        )
 
         QTimer.singleShot(
             1800,
-            lambda: self.copy_btn.setText("⧉  Копировать ссылку")
+            lambda: self.copy_btn.setText(
+                "⧉  Копировать ссылку"
+            )
         )
 
     # Открытие ссылки
@@ -748,7 +948,10 @@ class RemoteTouchApp(QMainWindow):
             }
         """)
 
-        self.status.setText("●  Сервер остановлен")
+        self.status.setText(
+            "●  Сервер остановлен"
+        )
+
         self.status.setStyleSheet(
             "color: #fca5a5; font-size: 13px; font-weight: 700;"
         )
