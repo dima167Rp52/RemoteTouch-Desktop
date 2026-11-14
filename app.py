@@ -260,7 +260,7 @@ class RemoteTouchApp(QMainWindow):
         brand = QLabel("RemoteTouch")
         brand.setObjectName("brand")
 
-        version = QLabel("DESKTOP CONTROL CENTER  •  1.0.0")
+        version = QLabel("DESKTOP CONTROL CENTER  •  1.2.0")
         version.setObjectName("version")
 
         brand_col.addWidget(brand)
@@ -489,6 +489,12 @@ class RemoteTouchApp(QMainWindow):
         self.code_label.setAlignment(Qt.AlignCenter)
         self.code_label.setStyleSheet("color:#86efac;font-size:24px;font-weight:800;letter-spacing:4px;")
         rl.addWidget(self.code_label)
+
+        code_hint = QLabel("Для подключения из интернета включи кнопку «ОТКРЫТЬ ДОСТУП ИЗ ИНТЕРНЕТА».")
+        code_hint.setObjectName("muted")
+        code_hint.setWordWrap(True)
+        code_hint.setAlignment(Qt.AlignCenter)
+        rl.addWidget(code_hint)
 
         buttons = QHBoxLayout()
 
