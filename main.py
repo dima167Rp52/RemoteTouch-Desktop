@@ -859,14 +859,14 @@ screen.addEventListener("pointerdown",event=>{
     if(!gameMode) {
         const rect=image.getBoundingClientRect();
         sendMove(event.clientX-rect.left,event.clientY-rect.top);
-
-        longPressTimer=setTimeout(()=>{
-            if(pointerStart && !pointerMoved) {
-                longPressTriggered=true;
-                clickMouse("right");
-            }
-        },1000);
     }
+
+    longPressTimer=setTimeout(()=>{
+        if(pointerStart && !pointerMoved) {
+            longPressTriggered=true;
+            clickMouse("right");
+        }
+    },1000);
 });
 
 screen.addEventListener("pointermove",event=>{
@@ -902,7 +902,7 @@ function finishScreenTouch() {
         longPressTimer=null;
     }
 
-    if(pointerStart && !pointerMoved && !longPressTriggered && !gameMode) {
+    if(pointerStart && !pointerMoved && !longPressTriggered) {
         clickMouse("left");
     }
 
