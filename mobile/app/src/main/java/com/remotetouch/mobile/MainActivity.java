@@ -35,6 +35,9 @@ public class MainActivity extends Activity {
     private EditText addressInput;
     private TextView status;
     private WebView webView;
+    private String allowedHost = "";
+    private String allowedScheme = "";
+    private int allowedPort = -1;
     private View homeView;
 
     @Override
@@ -182,6 +185,10 @@ public class MainActivity extends Activity {
     }
 
     private void showBrowser(String url) {
+        Uri startUri = Uri.parse(url);
+        allowedHost = startUri.getHost() == null ? "" : startUri.getHost().toLowerCase(Locale.ROOT);
+        allowedScheme = startUri.getScheme() == null ? "" : startUri.getScheme().toLowerCase(Locale.ROOT);
+        allowedPort = startUri.getPort();
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
@@ -211,8 +218,11 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String scheme = request.getUrl().getScheme();
-                return !(scheme.equals("http") || scheme.equals("https"));
+                Uri target = request.getUrl();
+                String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(Locale.ROOT);
+                String host = target.getHost() == null ? "" : target.getHost().toLowerCase(Locale.ROOT);
+                return !(scheme.equals(allowedScheme) && host.equals(allowedHost)
+                        && target.getPort() == allowedPort);
             }
 
             @Override
