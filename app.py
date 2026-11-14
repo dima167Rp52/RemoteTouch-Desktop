@@ -249,7 +249,7 @@ class RemoteTouchApp(QMainWindow):
         brand = QLabel("RemoteTouch")
         brand.setObjectName("brand")
 
-        version = QLabel("DESKTOP CONTROL CENTER  •  0.9.0")
+        version = QLabel("DESKTOP CONTROL CENTER  •  1.0.0")
         version.setObjectName("version")
 
         brand_col.addWidget(brand)
