@@ -470,8 +470,14 @@ public class MainActivity extends Activity {
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(12, 6, 12, 6);
         top.setBackgroundColor(PANEL);
-        Button back = button("← Компьютеры");
-        back.setOnClickListener(v -> showHome());
+        Button back = button(sessionToken.isEmpty() ? "← Компьютеры" : "← Панель управления");
+        back.setOnClickListener(v -> {
+            if (!sessionToken.isEmpty()) {
+                showConnectedControls(connectedBaseUrl + "/remote?token=" + Uri.encode(sessionToken));
+            } else {
+                showHome();
+            }
+        });
         top.addView(back);
         root.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
