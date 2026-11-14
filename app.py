@@ -32,7 +32,8 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QMessageBox,
     QGraphicsOpacityEffect,
-    QComboBox
+    QComboBox,
+    QCheckBox
 )
 
 from urllib.parse import quote
@@ -371,6 +372,17 @@ class RemoteTouchApp(QMainWindow):
 
         cl.addWidget(self.stop_internet_btn)
 
+        self.auto_trust_check = QCheckBox(
+            "Автоматически разрешать доверенным устройствам"
+        )
+        self.auto_trust_check.setStyleSheet(
+            "color: #c5d5eb; font-size: 12px; padding: 5px;"
+        )
+        self.auto_trust_check.toggled.connect(
+            remote_server.PAIRING.set_auto_allow_trusted
+        )
+        cl.addWidget(self.auto_trust_check)
+
         cl.addSpacing(6)
 
         cl.addWidget(
@@ -522,6 +534,45 @@ class RemoteTouchApp(QMainWindow):
         self.pulse.setEasingCurve(QEasingCurve.InOutSine)
         self.pulse.setLoopCount(-1)
         self.pulse.start()
+
+        self.pairing_timer = QTimer(self)
+        self.pairing_timer.timeout.connect(self.check_pairing_requests)
+        self.pairing_timer.start(900)
+
+    def check_pairing_requests(self):
+        """Ask the computer owner before granting a new device access."""
+        if not self.httpd:
+            return
+
+        for request in remote_server.PAIRING.pending_requests():
+            box = QMessageBox(self)
+            box.setWindowTitle("Запрос RemoteTouch")
+            box.setIcon(QMessageBox.Question)
+            box.setText(
+                "Устройство просит доступ к компьютеру:\\n\\n"
+                + request["device_name"]
+                + "\\n\\nРазрешить управление экраном и мышью?"
+            )
+            box.setInformativeText(
+                "Если устройство ваше, можно добавить его в доверенные."
+            )
+            box.setStandardButtons(
+                QMessageBox.Yes | QMessageBox.No
+            )
+            box.button(QMessageBox.Yes).setText("Разрешить")
+            box.button(QMessageBox.No).setText("Отклонить")
+
+            trust = QCheckBox("Запомнить устройство и доверять ему")
+            box.setCheckBox(trust)
+
+            answer = box.exec()
+            if answer == QMessageBox.Yes:
+                remote_server.PAIRING.approve(
+                    request["request_id"],
+                    trust_device=trust.isChecked()
+                )
+            else:
+                remote_server.PAIRING.deny(request["request_id"])
 
     def make_info(self, symbol, title, subtitle):
         row = QWidget()
