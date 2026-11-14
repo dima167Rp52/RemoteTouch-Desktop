@@ -1048,19 +1048,19 @@ class RemoteTouchApp(QMainWindow):
 
     # Объявление компьютера в локальной сети для мобильного приложения.
     def broadcast_discovery(self):
-        packet = json.dumps({
-            "type": "remotetouch_discovery",
-            "name": socket.gethostname(),
-            "url": self.address,
-            "version": 1
-        }).encode("utf-8")
-
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             while not self.discovery_stop.is_set():
+                packet = json.dumps({
+                    "type": "remotetouch_discovery",
+                    "name": socket.gethostname(),
+                    "url": self.address,
+                    "version": 1
+                }).encode("utf-8")
                 try:
-                    sock.sendto(packet, ("255.255.255.255", 8766))
+                    if self.address:
+                        sock.sendto(packet, ("255.255.255.255", 8766))
                 except OSError:
                     pass
                 self.discovery_stop.wait(2.0)
