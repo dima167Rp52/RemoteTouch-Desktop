@@ -8,8 +8,6 @@ import android.view.View;
 import android.view.Gravity;
 import android.view.inputmethod.InputMethodManager;
 import android.content.Context;
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -22,7 +20,16 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.net.Uri;
 
+import org.json.JSONObject;
+
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final int BG = Color.rgb(8, 13, 24);
@@ -30,15 +37,20 @@ public class MainActivity extends Activity {
     private static final int BLUE = Color.rgb(37, 99, 235);
     private static final int TEXT = Color.rgb(237, 244, 255);
     private static final int MUTED = Color.rgb(145, 164, 194);
+    private static final int DISCOVERY_PORT = 8766;
 
     private LinearLayout root;
-    private EditText addressInput;
+    private LinearLayout deviceList;
     private TextView status;
+    private EditText addressInput;
     private WebView webView;
     private String allowedHost = "";
     private String allowedScheme = "";
     private int allowedPort = -1;
-    private View homeView;
+    private final Map<String, String> devices = new LinkedHashMap<>();
+    private volatile boolean scanning = false;
+    private volatile DatagramSocket discoverySocket;
+    private Thread discoveryThread;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -62,7 +74,7 @@ public class MainActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(15);
+        b.setTextSize(14);
         b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(BLUE));
         return b;
     }
@@ -70,12 +82,13 @@ public class MainActivity extends Activity {
     private LinearLayout column() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(24, 22, 24, 22);
+        box.setPadding(20, 18, 20, 18);
         box.setBackgroundColor(PANEL);
         return box;
     }
 
     private void showHome() {
+        stopDiscovery();
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
@@ -84,107 +97,194 @@ public class MainActivity extends Activity {
 
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(22, 34, 22, 24);
+        root.setPadding(20, 28, 20, 20);
         root.setBackgroundColor(BG);
 
         TextView brand = text("RemoteTouch", 30, TEXT, true);
         brand.setGravity(Gravity.CENTER);
         root.addView(brand);
 
-        TextView subtitle = text("УПРАВЛЕНИЕ КОМПЬЮТЕРОМ С ТЕЛЕФОНА", 11, MUTED, true);
+        TextView subtitle = text("ВЫБЕРИ КОМПЬЮТЕР ДЛЯ ПОДКЛЮЧЕНИЯ", 11, MUTED, true);
         subtitle.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(-1, -2);
-        subParams.setMargins(0, 8, 0, 28);
-        root.addView(subtitle, subParams);
+        LinearLayout.LayoutParams sub = new LinearLayout.LayoutParams(-1, -2);
+        sub.setMargins(0, 7, 0, 22);
+        root.addView(subtitle, sub);
 
         LinearLayout card = column();
-        TextView title = text("Добавить компьютер", 21, TEXT, true);
-        card.addView(title);
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text("Компьютеры рядом", 20, TEXT, true);
+        titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        Button refresh = button("↻");
+        refresh.setMinWidth(52);
+        titleRow.addView(refresh);
+        card.addView(titleRow);
+        refresh.setOnClickListener(v -> startDiscovery());
 
-        TextView hint = text("Вставь ссылку подключения из RemoteTouch Desktop. Подойдёт локальная ссылка Wi-Fi или защищённая ссылка для интернета.", 14, MUTED, false);
-        hint.setPadding(0, 12, 0, 16);
-        card.addView(hint);
+        status = text("Ищем компьютеры в этой Wi-Fi сети…", 13, MUTED, false);
+        status.setPadding(0, 8, 0, 12);
+        card.addView(status);
+
+        deviceList = new LinearLayout(this);
+        deviceList.setOrientation(LinearLayout.VERTICAL);
+        card.addView(deviceList);
+        root.addView(card);
+
+        LinearLayout manual = column();
+        TextView manualTitle = text("Подключение по ссылке", 16, TEXT, true);
+        manual.addView(manualTitle);
+        TextView hint = text("Можно вручную вставить ссылку компьютера, если подключаешься через интернет.", 12, MUTED, false);
+        hint.setPadding(0, 6, 0, 10);
+        manual.addView(hint);
 
         addressInput = new EditText(this);
         addressInput.setSingleLine(true);
         addressInput.setTextSize(14);
         addressInput.setTextColor(TEXT);
         addressInput.setHintTextColor(MUTED);
-        addressInput.setHint("http://192.168.1.100:8765/?pin=...");
-        addressInput.setPadding(14, 14, 14, 14);
+        addressInput.setHint("https://имя-компьютера.ts.net/?pin=…");
+        addressInput.setPadding(12, 12, 12, 12);
         addressInput.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(96, 165, 250)));
-        card.addView(addressInput, new LinearLayout.LayoutParams(-1, -2));
+        manual.addView(addressInput, new LinearLayout.LayoutParams(-1, -2));
 
-        Button paste = button("Вставить ссылку");
-        paste.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(51, 65, 85)));
-        LinearLayout.LayoutParams pasteParams = new LinearLayout.LayoutParams(-1, -2);
-        pasteParams.setMargins(0, 12, 0, 4);
-        card.addView(paste, pasteParams);
-        paste.setOnClickListener(v -> pasteLink());
+        Button connect = button("Подключиться по ссылке");
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+        cp.setMargins(0, 10, 0, 0);
+        manual.addView(connect, cp);
+        connect.setOnClickListener(v -> connectManual());
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, -2);
+        mp.setMargins(0, 14, 0, 0);
+        root.addView(manual, mp);
 
-        Button connect = button("Подключить компьютер");
-        LinearLayout.LayoutParams connectParams = new LinearLayout.LayoutParams(-1, -2);
-        connectParams.setMargins(0, 12, 0, 0);
-        card.addView(connect, connectParams);
-        connect.setOnClickListener(v -> connect());
-
-        status = text("Новый компьютер попросит подтверждение на Windows.", 12, MUTED, false);
-        status.setPadding(2, 16, 2, 0);
-        card.addView(status);
-
-        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
-        root.addView(card, cardParams);
-
-        TextView footer = text("RemoteTouch Mobile 1.0.0", 12, MUTED, false);
+        TextView footer = text("RemoteTouch Mobile 1.1.0", 11, MUTED, false);
         footer.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
-        footerParams.setMargins(0, 24, 0, 0);
-        root.addView(footer, footerParams);
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
+        fp.setMargins(0, 18, 0, 0);
+        root.addView(footer, fp);
 
-        homeView = root;
         setContentView(root);
+        renderDevices();
+        startDiscovery();
     }
 
-    private void pasteLink() {
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (clipboard != null && clipboard.hasPrimaryClip()) {
-            ClipData clip = clipboard.getPrimaryClip();
-            if (clip != null && clip.getItemCount() > 0) {
-                CharSequence value = clip.getItemAt(0).coerceToText(this);
-                addressInput.setText(value);
-                addressInput.setSelection(addressInput.length());
+    private void renderDevices() {
+        if (deviceList == null) return;
+        deviceList.removeAllViews();
+        if (devices.isEmpty()) {
+            TextView empty = text("Пока компьютеры не найдены. Убедись, что RemoteTouch Desktop запущен и телефон подключён к той же Wi-Fi сети.", 13, MUTED, false);
+            empty.setPadding(0, 8, 0, 4);
+            empty.setLineSpacing(3, 1.0f);
+            deviceList.addView(empty);
+            return;
+        }
+        for (Map.Entry<String, String> entry : devices.entrySet()) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(12, 10, 8, 10);
+            row.setBackgroundColor(Color.rgb(11, 21, 39));
+            LinearLayout info = new LinearLayout(this);
+            info.setOrientation(LinearLayout.VERTICAL);
+            TextView name = text(entry.getKey(), 15, TEXT, true);
+            TextView online = text("● В сети • локальная Wi-Fi", 11, Color.rgb(134, 239, 172), false);
+            info.addView(name);
+            info.addView(online);
+            row.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
+            Button choose = button("Выбрать");
+            row.addView(choose);
+            String url = entry.getValue();
+            choose.setOnClickListener(v -> showBrowser(url));
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+            rp.setMargins(0, 0, 0, 8);
+            deviceList.addView(row, rp);
+        }
+    }
+
+    private void startDiscovery() {
+        stopDiscovery();
+        devices.clear();
+        renderDevices();
+        status.setText("Ищем компьютеры в локальной сети…");
+        scanning = true;
+        discoveryThread = new Thread(() -> {
+            long deadline = System.currentTimeMillis() + 9000;
+            DatagramSocket socket = null;
+            try {
+                socket = new DatagramSocket(null);
+                socket.setReuseAddress(true);
+                socket.bind(new InetSocketAddress(DISCOVERY_PORT));
+                socket.setSoTimeout(700);
+                discoverySocket = socket;
+                byte[] buffer = new byte[4096];
+                while (scanning && System.currentTimeMillis() < deadline) {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    try {
+                        socket.receive(packet);
+                        String raw = new String(packet.getData(), packet.getOffset(), packet.getLength(), StandardCharsets.UTF_8);
+                        JSONObject data = new JSONObject(raw);
+                        if (!"remotetouch_discovery".equals(data.optString("type"))) continue;
+                        String name = data.optString("name", "Компьютер");
+                        String url = data.optString("url", "");
+                        Uri uri = Uri.parse(url);
+                        if (uri.getHost() == null || !"http".equalsIgnoreCase(uri.getScheme())
+                                || uri.getQueryParameter("pin") == null) continue;
+                        runOnUiThread(() -> {
+                            if (!scanning || deviceList == null) return;
+                            devices.put(name, url);
+                            status.setText("Найдено компьютеров: " + devices.size());
+                            renderDevices();
+                        });
+                    } catch (SocketTimeoutException ignored) {
+                    } catch (Exception ignored) {
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (socket != null) socket.close();
+                discoverySocket = null;
+                scanning = false;
+                runOnUiThread(() -> {
+                    if (status != null && webView == null) {
+                        status.setText(devices.isEmpty()
+                                ? "Не нашли компьютеры. Проверь одну Wi-Fi сеть и включённый сервер."
+                                : "Поиск завершён. Выбери компьютер.");
+                    }
+                });
             }
-        } else {
-            Toast.makeText(this, "Буфер обмена пуст", Toast.LENGTH_SHORT).show();
-        }
+        }, "RemoteTouch-LAN-Discovery");
+        discoveryThread.setDaemon(true);
+        discoveryThread.start();
     }
 
-    private void connect() {
+    private void stopDiscovery() {
+        scanning = false;
+        DatagramSocket socket = discoverySocket;
+        if (socket != null) socket.close();
+        discoverySocket = null;
+    }
+
+    private void connectManual() {
         String raw = addressInput.getText().toString().trim();
-        if (raw.isEmpty()) {
-            addressInput.setError("Вставь ссылку подключения");
+        if (!isPairingUrl(raw)) {
+            addressInput.setError("Нужна полная ссылка http:// или https:// с PIN");
             return;
         }
-
-        Uri uri = Uri.parse(raw);
-        String scheme = uri.getScheme();
-        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")) || uri.getHost() == null) {
-            addressInput.setError("Нужна полная ссылка http:// или https://");
-            return;
-        }
-        if (!uri.getQueryParameterNames().contains("pin") || uri.getQueryParameter("pin") == null || uri.getQueryParameter("pin").isEmpty()) {
-            addressInput.setError("В ссылке не найден PIN. Скопируй ссылку из окна RemoteTouch Desktop.");
-            return;
-        }
-
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
                 .hideSoftInputFromWindow(addressInput.getWindowToken(), 0);
-
         showBrowser(raw);
     }
 
+    private boolean isPairingUrl(String raw) {
+        Uri uri = Uri.parse(raw);
+        String scheme = uri.getScheme();
+        return scheme != null
+                && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))
+                && uri.getHost() != null
+                && uri.getQueryParameter("pin") != null
+                && !uri.getQueryParameter("pin").isEmpty();
+    }
+
     private void showBrowser(String url) {
+        stopDiscovery();
         Uri startUri = Uri.parse(url);
         allowedHost = startUri.getHost() == null ? "" : startUri.getHost().toLowerCase(Locale.ROOT);
         allowedScheme = startUri.getScheme() == null ? "" : startUri.getScheme().toLowerCase(Locale.ROOT);
@@ -197,16 +297,9 @@ public class MainActivity extends Activity {
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(12, 6, 12, 6);
         top.setBackgroundColor(PANEL);
-
-        Button back = button("←");
-        back.setMinWidth(52);
+        Button back = button("← Компьютеры");
         back.setOnClickListener(v -> showHome());
         top.addView(back);
-
-        TextView heading = text("RemoteTouch", 17, TEXT, true);
-        heading.setPadding(12, 0, 0, 0);
-        top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
-
         root.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         webView = new WebView(this);
@@ -250,6 +343,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        stopDiscovery();
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
