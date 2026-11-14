@@ -866,7 +866,7 @@ screen.addEventListener("pointerdown",event=>{
             longPressTriggered=true;
             send({action:"click",button:"left",pressed:true});
         }
-    },300);
+    },100);
 });
 
 screen.addEventListener("pointermove",event=>{
