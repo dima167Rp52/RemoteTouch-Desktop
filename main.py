@@ -397,7 +397,6 @@ button:active,button.active {
 
 <div class="buttons">
     <button class="mouseHold" data-mouse="left">ЛКМ</button>
-    <button class="mouseHold" data-mouse="right">ПКМ</button>
 </div>
 
 <div class="buttons">
@@ -861,12 +860,13 @@ screen.addEventListener("pointerdown",event=>{
         sendMove(event.clientX-rect.left,event.clientY-rect.top);
     }
 
+    // Защита от случайного касания: ЛКМ зажимается только после 0,3 секунды.
     longPressTimer=setTimeout(()=>{
-        if(pointerStart && !pointerMoved) {
+        if(pointerStart && !longPressTriggered) {
             longPressTriggered=true;
-            clickMouse("left");
+            send({action:"click",button:"left",pressed:true});
         }
-    },1000);
+    },300);
 });
 
 screen.addEventListener("pointermove",event=>{
@@ -879,10 +879,6 @@ screen.addEventListener("pointermove",event=>{
 
     if(Math.abs(dx)+Math.abs(dy)>5) {
         pointerMoved=true;
-        if(longPressTimer!==null) {
-            clearTimeout(longPressTimer);
-            longPressTimer=null;
-        }
     }
 
     if(gameMode) {
@@ -902,8 +898,9 @@ function finishScreenTouch() {
         longPressTimer=null;
     }
 
-    if(pointerStart && !pointerMoved && !longPressTriggered) {
-        clickMouse("right");
+    // Отпускаем ЛКМ сразу при отпускании пальца.
+    if(longPressTriggered) {
+        send({action:"click",button:"left",pressed:false});
     }
 
     pointerStart=null;
