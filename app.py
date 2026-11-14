@@ -33,7 +33,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QGraphicsOpacityEffect,
     QComboBox,
-    QCheckBox
+    QCheckBox,
+    QInputDialog
 )
 
 from urllib.parse import quote
@@ -386,6 +387,14 @@ class RemoteTouchApp(QMainWindow):
         )
         cl.addWidget(self.auto_trust_check)
 
+        self.trusted_devices_btn = QPushButton(
+            "УПРАВЛЕНИЕ ДОВЕРЕННЫМИ УСТРОЙСТВАМИ"
+        )
+        self.trusted_devices_btn.clicked.connect(
+            self.manage_trusted_devices
+        )
+        cl.addWidget(self.trusted_devices_btn)
+
         cl.addSpacing(6)
 
         cl.addWidget(
@@ -542,6 +551,46 @@ class RemoteTouchApp(QMainWindow):
         self.pairing_timer = QTimer(self)
         self.pairing_timer.timeout.connect(self.check_pairing_requests)
         self.pairing_timer.start(900)
+
+    def manage_trusted_devices(self):
+        devices = remote_server.PAIRING.trusted_devices()
+        if not devices:
+            QMessageBox.information(
+                self,
+                "Доверенные устройства",
+                "Пока нет сохранённых доверенных устройств."
+            )
+            return
+
+        labels = [
+            f'{item["name"]} • {item["device_id"][:8]}'
+            for item in devices
+        ]
+        selected, accepted = QInputDialog.getItem(
+            self,
+            "Доверенные устройства",
+            "Выбери устройство для отзыва доступа:",
+            labels,
+            0,
+            False
+        )
+        if not accepted:
+            return
+
+        index = labels.index(selected)
+        device = devices[index]
+        answer = QMessageBox.question(
+            self,
+            "Отозвать доступ",
+            f'Удалить доверие для устройства «{device["name"]}»?'
+        )
+        if answer == QMessageBox.Yes:
+            remote_server.PAIRING.revoke_device(device["device_id"])
+            QMessageBox.information(
+                self,
+                "Готово",
+                "Доверие удалено. Активные сессии этого устройства закрыты."
+            )
 
     def check_pairing_requests(self):
         """Ask the computer owner before granting a new device access."""
