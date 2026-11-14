@@ -37,7 +37,7 @@ PROFILES = {
 settings_lock = threading.Lock()
 current_mode = "auto"
 funnel_active = False
-remote_enabled = True
+remote_enabled = False
 
 user32 = ctypes.windll.user32
 
@@ -1006,7 +1006,7 @@ class Handler(BaseHTTPRequestHandler):
                 with mss.mss() as capture:
                     monitor = capture.monitors[1]
 
-                    while True:
+                    while is_remote_enabled():
                         start = time.perf_counter()
 
                         shot = capture.grab(monitor)
