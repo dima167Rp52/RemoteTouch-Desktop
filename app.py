@@ -378,6 +378,9 @@ class RemoteTouchApp(QMainWindow):
         self.auto_trust_check.setStyleSheet(
             "color: #c5d5eb; font-size: 12px; padding: 5px;"
         )
+        self.auto_trust_check.setChecked(
+            remote_server.PAIRING.auto_allow_trusted()
+        )
         self.auto_trust_check.toggled.connect(
             remote_server.PAIRING.set_auto_allow_trusted
         )
@@ -535,44 +538,53 @@ class RemoteTouchApp(QMainWindow):
         self.pulse.setLoopCount(-1)
         self.pulse.start()
 
+        self.pairing_prompt_active = False
         self.pairing_timer = QTimer(self)
         self.pairing_timer.timeout.connect(self.check_pairing_requests)
         self.pairing_timer.start(900)
 
     def check_pairing_requests(self):
         """Ask the computer owner before granting a new device access."""
-        if not self.httpd:
+        if not self.httpd or self.pairing_prompt_active:
             return
 
-        for request in remote_server.PAIRING.pending_requests():
-            box = QMessageBox(self)
-            box.setWindowTitle("Запрос RemoteTouch")
-            box.setIcon(QMessageBox.Question)
-            box.setText(
-                "Устройство просит доступ к компьютеру:\\n\\n"
-                + request["device_name"]
-                + "\\n\\nРазрешить управление экраном и мышью?"
-            )
-            box.setInformativeText(
-                "Если устройство ваше, можно добавить его в доверенные."
-            )
-            box.setStandardButtons(
-                QMessageBox.Yes | QMessageBox.No
-            )
-            box.button(QMessageBox.Yes).setText("Разрешить")
-            box.button(QMessageBox.No).setText("Отклонить")
+        requests = remote_server.PAIRING.pending_requests()
+        if not requests:
+            return
 
-            trust = QCheckBox("Запомнить устройство и доверять ему")
-            box.setCheckBox(trust)
-
-            answer = box.exec()
-            if answer == QMessageBox.Yes:
-                remote_server.PAIRING.approve(
-                    request["request_id"],
-                    trust_device=trust.isChecked()
+        self.pairing_prompt_active = True
+        try:
+            for request in requests:
+                box = QMessageBox(self)
+                box.setWindowTitle("Запрос RemoteTouch")
+                box.setIcon(QMessageBox.Question)
+                box.setText(
+                    "Устройство просит доступ к компьютеру:\n\n"
+                    + request["device_name"]
+                    + "\n\nРазрешить управление экраном и мышью?"
                 )
-            else:
-                remote_server.PAIRING.deny(request["request_id"])
+                box.setInformativeText(
+                    "Если устройство ваше, можно добавить его в доверенные."
+                )
+                box.setStandardButtons(
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                box.button(QMessageBox.Yes).setText("Разрешить")
+                box.button(QMessageBox.No).setText("Отклонить")
+
+                trust = QCheckBox("Запомнить устройство и доверять ему")
+                box.setCheckBox(trust)
+
+                answer = box.exec()
+                if answer == QMessageBox.Yes:
+                    remote_server.PAIRING.approve(
+                        request["request_id"],
+                        trust_device=trust.isChecked()
+                    )
+                else:
+                    remote_server.PAIRING.deny(request["request_id"])
+        finally:
+            self.pairing_prompt_active = False
 
     def make_info(self, symbol, title, subtitle):
         row = QWidget()
