@@ -97,7 +97,6 @@ public class MainActivity extends Activity {
 
     private void showHome() {
         stopDiscovery();
-        network.shutdownNow();
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
@@ -428,6 +427,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         stopDiscovery();
+        network.shutdownNow();
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
