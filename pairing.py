@@ -183,10 +183,12 @@ class PairingManager:
             if not request:
                 return {"status": "expired"}
             if request["status"] == "approved":
-                token = request["session_token"]
-                request["status"] = "delivered"
-                request["session_token"] = ""
-                return {"status": "approved", "session_token": token}
+                # Keep the token available for the short request lifetime so a
+                # lost polling response can be retried safely.
+                return {
+                    "status": "approved",
+                    "session_token": request["session_token"],
+                }
             return {"status": request["status"]}
 
     def _new_session_locked(self, device_id: str, name: str, now: float) -> str:
