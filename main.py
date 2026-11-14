@@ -303,7 +303,7 @@ button:active,button.active {
 <body>
 
 <h1>RemoteTouch</h1>
-<div class="subtitle">Version 0.9.0 • SMART PERFORMANCE</div>
+<div class="subtitle">Version 1.0.0 • DEVICE PAIRING</div>
 
 <div class="screen" id="screen">
     <img id="screenImage" src="/stream?token=TOKEN">
