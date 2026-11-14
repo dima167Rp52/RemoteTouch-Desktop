@@ -8,6 +8,9 @@ import os
 import re
 import json
 import time
+import secrets
+import string
+import urllib.request
 
 import qrcode
 from PIL.ImageQt import ImageQt
@@ -71,6 +74,10 @@ class RemoteTouchApp(QMainWindow):
         self.internet_address = ""
         self.discovery_stop = threading.Event()
         self.discovery_thread = None
+        self.pair_code = ""
+        self.directory_timer = QTimer(self)
+        self.directory_timer.timeout.connect(self.register_directory)
+        self.directory_timer.start(30000)
 
         self.setWindowTitle("RemoteTouch")
         self.setMinimumSize(820, 740)
@@ -477,6 +484,12 @@ class RemoteTouchApp(QMainWindow):
 
         rl.addWidget(self.pin_label)
 
+        self.code_label = QLabel("КОД ПОДКЛЮЧЕНИЯ: —")
+        self.code_label.setObjectName("pin")
+        self.code_label.setAlignment(Qt.AlignCenter)
+        self.code_label.setStyleSheet("color:#86efac;font-size:24px;font-weight:800;letter-spacing:4px;")
+        rl.addWidget(self.code_label)
+
         buttons = QHBoxLayout()
 
         self.copy_btn = QPushButton("⧉  Копировать ссылку")
@@ -730,6 +743,9 @@ class RemoteTouchApp(QMainWindow):
 
             ip = local_ip()
 
+            self.pair_code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(4))
+            self.code_label.setText("КОД ПОДКЛЮЧЕНИЯ: " + self.pair_code)
+
             self.address = (
                 f"http://{ip}:{remote_server.PORT}/"
                 f"?pin={quote(remote_server.PIN)}"
@@ -861,6 +877,30 @@ class RemoteTouchApp(QMainWindow):
                 "Проверь Tailscale и его настройки."
             )
 
+    def register_directory(self):
+        if not self.internet_address or not self.pair_code:
+            return
+        payload = json.dumps({
+            "code": self.pair_code,
+            "url": self.internet_address.split("?pin=", 1)[0],
+            "pin": remote_server.PIN
+        }).encode("utf-8")
+
+        def send():
+            try:
+                req = urllib.request.Request(
+                    "https://remotetouch-directory.onrender.com/api/register",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    response.read()
+            except Exception:
+                pass
+
+        threading.Thread(target=send, daemon=True).start()
+
     # Получение публичной ссылки
     def on_funnel_output(self):
         if not self.funnel_process:
@@ -883,6 +923,7 @@ class RemoteTouchApp(QMainWindow):
                 + "/?pin="
                 + quote(remote_server.PIN)
             )
+            self.register_directory()
 
             remote_server.set_mode(
                 self.mode_combo.currentData(),
@@ -1083,6 +1124,8 @@ class RemoteTouchApp(QMainWindow):
 
         self.url_label.setText("http://—:8765")
         self.pin_label.setText("PIN: —")
+        self.pair_code = ""
+        self.code_label.setText("КОД ПОДКЛЮЧЕНИЯ: —")
 
         self.qr_label.clear()
         self.qr_label.setText("Сначала запусти сервер")
