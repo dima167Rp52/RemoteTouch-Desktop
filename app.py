@@ -6,6 +6,8 @@ import webbrowser
 import shutil
 import os
 import re
+import json
+import time
 
 import qrcode
 from PIL.ImageQt import ImageQt
@@ -67,6 +69,8 @@ class RemoteTouchApp(QMainWindow):
 
         self.funnel_process = None
         self.internet_address = ""
+        self.discovery_stop = threading.Event()
+        self.discovery_thread = None
 
         self.setWindowTitle("RemoteTouch")
         self.setMinimumSize(820, 740)
@@ -711,6 +715,14 @@ class RemoteTouchApp(QMainWindow):
 
             self.server_thread.start()
 
+            # Обнаружение компьютера приложением RemoteTouch в той же Wi-Fi сети.
+            self.discovery_stop.clear()
+            self.discovery_thread = threading.Thread(
+                target=self.broadcast_discovery,
+                daemon=True
+            )
+            self.discovery_thread.start()
+
             remote_server.set_mode(
                 self.mode_combo.currentData(),
                 funnel=False
@@ -1034,8 +1046,31 @@ class RemoteTouchApp(QMainWindow):
         if link:
             webbrowser.open(link)
 
+    # Объявление компьютера в локальной сети для мобильного приложения.
+    def broadcast_discovery(self):
+        packet = json.dumps({
+            "type": "remotetouch_discovery",
+            "name": socket.gethostname(),
+            "url": self.address,
+            "version": 1
+        }).encode("utf-8")
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            while not self.discovery_stop.is_set():
+                try:
+                    sock.sendto(packet, ("255.255.255.255", 8766))
+                except OSError:
+                    pass
+                self.discovery_stop.wait(2.0)
+        finally:
+            sock.close()
+
     # Остановка сервера
     def stop_server(self):
+        self.discovery_stop.set()
+        self.discovery_thread = None
         self.stop_funnel()
 
         if self.httpd:
