@@ -868,7 +868,15 @@ const button = document.getElementById("connect");
 let requestId = "";
 function deviceId(){
  let id=localStorage.getItem("remotetouch_device_id");
- if(!id){id=crypto.randomUUID();localStorage.setItem("remotetouch_device_id",id)}
+ if(!id){
+  id=(window.crypto&&crypto.randomUUID)
+   ? crypto.randomUUID()
+   : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{
+      const r=Math.random()*16|0;
+      return (c==="x"?r:(r&3|8)).toString(16);
+     });
+  localStorage.setItem("remotetouch_device_id",id);
+ }
  return id;
 }
 async function poll(){
