@@ -26,6 +26,12 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.OutputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -43,6 +49,8 @@ public class MainActivity extends Activity {
     private LinearLayout deviceList;
     private TextView status;
     private EditText addressInput;
+    private EditText codeInput;
+    private final ExecutorService network = Executors.newSingleThreadExecutor();
     private WebView webView;
     private String allowedHost = "";
     private String allowedScheme = "";
@@ -89,6 +97,7 @@ public class MainActivity extends Activity {
 
     private void showHome() {
         stopDiscovery();
+        network.shutdownNow();
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
@@ -130,8 +139,34 @@ public class MainActivity extends Activity {
         card.addView(deviceList);
         root.addView(card);
 
+        LinearLayout codeCard = column();
+        TextView codeTitle = text("Подключение через интернет", 18, TEXT, true);
+        codeCard.addView(codeTitle);
+        TextView codeHint = text("Введи 4-значный код, который показан в RemoteTouch на компьютере.", 12, MUTED, false);
+        codeHint.setPadding(0, 6, 0, 10);
+        codeCard.addView(codeHint);
+        codeInput = new EditText(this);
+        codeInput.setSingleLine(true);
+        codeInput.setTextSize(22);
+        codeInput.setTextColor(TEXT);
+        codeInput.setHintTextColor(MUTED);
+        codeInput.setHint("Например, K7M2");
+        codeInput.setLetterSpacing(0.18f);
+        codeInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        codeInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(4)});
+        codeInput.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(96, 165, 250)));
+        codeCard.addView(codeInput, new LinearLayout.LayoutParams(-1, -2));
+        Button codeConnect = button("Подключиться к компьютеру");
+        LinearLayout.LayoutParams ccp = new LinearLayout.LayoutParams(-1, -2);
+        ccp.setMargins(0, 10, 0, 0);
+        codeCard.addView(codeConnect, ccp);
+        codeConnect.setOnClickListener(v -> connectByCode());
+        LinearLayout.LayoutParams cdp = new LinearLayout.LayoutParams(-1, -2);
+        cdp.setMargins(0, 0, 0, 14);
+        root.addView(codeCard, cdp);
+
         LinearLayout manual = column();
-        TextView manualTitle = text("Подключение по ссылке", 16, TEXT, true);
+        TextView manualTitle = text("Ручное подключение (резервный способ)", 16, TEXT, true);
         manual.addView(manualTitle);
         TextView hint = text("Можно вручную вставить ссылку компьютера, если подключаешься через интернет.", 12, MUTED, false);
         hint.setPadding(0, 6, 0, 10);
@@ -260,6 +295,55 @@ public class MainActivity extends Activity {
         DatagramSocket socket = discoverySocket;
         if (socket != null) socket.close();
         discoverySocket = null;
+    }
+
+    private void connectByCode() {
+        String code = codeInput.getText().toString().trim().toUpperCase(Locale.ROOT);
+        if (!code.matches("[A-Z0-9]{4}")) {
+            codeInput.setError("Нужны ровно 4 буквы или цифры");
+            return;
+        }
+        ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                .hideSoftInputFromWindow(codeInput.getWindowToken(), 0);
+        status.setText("Ищем компьютер по коду…");
+        network.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL endpoint = new URL("https://remotetouch-directory.onrender.com/api/lookup");
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(12000);
+                connection.setReadTimeout(12000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json");
+                byte[] body = new JSONObject().put("code", code).toString().getBytes(StandardCharsets.UTF_8);
+                try (OutputStream out = connection.getOutputStream()) { out.write(body); }
+                int statusCode = connection.getResponseCode();
+                java.io.InputStream stream = statusCode >= 200 && statusCode < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                byte[] buffer = new byte[2048];
+                int count;
+                while ((count = stream.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                JSONObject result = new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
+                if (statusCode < 200 || statusCode >= 300) {
+                    throw new Exception(result.optString("error", "Компьютер не найден"));
+                }
+                String base = result.getString("url");
+                String pin = result.getString("pin");
+                Uri uri = Uri.parse(base);
+                if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || !uri.getHost().endsWith(".ts.net")) {
+                    throw new Exception("Сервер вернул некорректный адрес");
+                }
+                String fullUrl = base + (base.contains("?") ? "&" : "?") + "pin=" + Uri.encode(pin);
+                runOnUiThread(() -> showBrowser(fullUrl));
+            } catch (Exception e) {
+                String message = e.getMessage() == null ? "Не удалось найти компьютер" : e.getMessage();
+                runOnUiThread(() -> status.setText(message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
     }
 
     private void connectManual() {
