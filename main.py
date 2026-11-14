@@ -859,15 +859,18 @@ screen.addEventListener("pointerdown",event=>{
     if(!gameMode) {
         const rect=image.getBoundingClientRect();
         sendMove(event.clientX-rect.left,event.clientY-rect.top);
-    }
 
-    // Защита от случайного касания: ЛКМ зажимается только после 0,3 секунды.
-    longPressTimer=setTimeout(()=>{
-        if(pointerStart && !longPressTriggered) {
-            longPressTriggered=true;
-            send({action:"click",button:"left",pressed:true});
-        }
-    },100);
+        // В обычном режиме касание экрана — один обычный клик ЛКМ.
+        send({action:"click",button:"left"});
+    } else {
+        // В игровом режиме ЛКМ зажимается после 0,1 секунды удержания.
+        longPressTimer=setTimeout(()=>{
+            if(pointerStart && !longPressTriggered) {
+                longPressTriggered=true;
+                send({action:"click",button:"left",pressed:true});
+            }
+        },100);
+    }
 });
 
 screen.addEventListener("pointermove",event=>{
