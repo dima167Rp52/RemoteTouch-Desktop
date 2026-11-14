@@ -306,7 +306,7 @@ button:active,button.active {
 <div class="subtitle">Version 0.9.0 • SMART PERFORMANCE</div>
 
 <div class="screen" id="screen">
-    <img id="screenImage" src="/stream?pin=TOKEN">
+    <img id="screenImage" src="/stream?token=TOKEN">
 
     <svg id="cursor" viewBox="0 0 25 33">
         <path d="M2 1 L2 25 L8 19 L13 31 L17 29 L12 17 L22 17 Z"
@@ -469,7 +469,7 @@ const russianLabels = {
 };
 
 function send(command) {
-    fetch("/control?pin=" + encodeURIComponent(PIN), {
+    fetch("/control?token=" + encodeURIComponent(PIN), {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(command),
@@ -524,7 +524,7 @@ function flushNow() {
 async function updateRemoteSettings() {
     try {
         const response = await fetch(
-            "/settings?pin=" + encodeURIComponent(PIN),
+            "/settings?token=" + encodeURIComponent(PIN),
             {cache:"no-store"}
         );
 
