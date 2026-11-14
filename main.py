@@ -37,6 +37,7 @@ PROFILES = {
 settings_lock = threading.Lock()
 current_mode = "auto"
 funnel_active = False
+remote_enabled = True
 
 user32 = ctypes.windll.user32
 
@@ -68,6 +69,17 @@ def set_mode(mode, funnel=False):
     with settings_lock:
         current_mode = mode
         funnel_active = bool(funnel)
+
+
+def set_remote_enabled(enabled):
+    global remote_enabled
+    with settings_lock:
+        remote_enabled = bool(enabled)
+
+
+def is_remote_enabled():
+    with settings_lock:
+        return remote_enabled
 
 
 def get_profile():
@@ -958,6 +970,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(403)
             return
 
+        if path == "/app/status":
+            self.send_json(200, {"remote_enabled": is_remote_enabled()})
+            return
+
         if path == "/settings":
             profile = get_profile()
             data = json.dumps(profile).encode("utf-8")
@@ -970,6 +986,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/stream":
+            if not is_remote_enabled():
+                self.send_error(409, "Remote streaming is stopped")
+                return
             self.send_response(200)
 
             self.send_header(
@@ -1072,12 +1091,24 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(exc)})
             return
 
+        if path in ("/app/remote/start", "/app/remote/stop"):
+            if not self.authorized():
+                self.send_error(403)
+                return
+            set_remote_enabled(path.endswith("/start"))
+            self.send_json(200, {"remote_enabled": is_remote_enabled()})
+            return
+
         if path != "/control":
             self.send_error(404)
             return
 
         if not self.authorized():
             self.send_error(403)
+            return
+
+        if not is_remote_enabled():
+            self.send_error(409, "Remote control is stopped")
             return
 
         try:
