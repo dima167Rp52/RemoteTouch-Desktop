@@ -55,6 +55,9 @@ public class MainActivity extends Activity {
     private String allowedHost = "";
     private String allowedScheme = "";
     private int allowedPort = -1;
+    private String connectedBaseUrl = "";
+    private String sessionToken = "";
+    private boolean allowRemotePage = false;
     private final Map<String, String> devices = new LinkedHashMap<>();
     private volatile boolean scanning = false;
     private volatile DatagramSocket discoverySocket;
@@ -296,6 +299,92 @@ public class MainActivity extends Activity {
         discoverySocket = null;
     }
 
+    private void showConnectedControls(String remoteUrl) {
+        Uri uri = Uri.parse(remoteUrl);
+        sessionToken = uri.getQueryParameter("token");
+        connectedBaseUrl = uri.getScheme() + "://" + uri.getAuthority();
+        allowRemotePage = false;
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+            webView = null;
+        }
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(22, 30, 22, 22);
+        root.setBackgroundColor(BG);
+        TextView heading = text("Компьютер подключён", 24, TEXT, true);
+        heading.setGravity(Gravity.CENTER);
+        root.addView(heading);
+        TextView sub = text("RemoteTouch Desktop • управление приложением", 13, MUTED, false);
+        sub.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
+        sp.setMargins(0, 8, 0, 24);
+        root.addView(sub, sp);
+        Button start = button("▶ Запустить удалённое управление");
+        root.addView(start);
+        start.setOnClickListener(v -> sendRemoteAction("start"));
+        Button stop = button("■ Остановить удалённое управление");
+        LinearLayout.LayoutParams stp = new LinearLayout.LayoutParams(-1, -2);
+        stp.setMargins(0, 10, 0, 0);
+        root.addView(stop, stp);
+        stop.setOnClickListener(v -> sendRemoteAction("stop"));
+        Button stream = button("Трансляция и управление экраном");
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
+        tp.setMargins(0, 20, 0, 0);
+        root.addView(stream, tp);
+        stream.setOnClickListener(v -> showBrowser(remoteUrl));
+        Button back = button("Отключиться");
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
+        bp.setMargins(0, 10, 0, 0);
+        root.addView(back, bp);
+        back.setOnClickListener(v -> showHome());
+        status = text("Подключено. Компьютер ожидает команды.", 13, MUTED, false);
+        status.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
+        statusParams.setMargins(0, 20, 0, 0);
+        root.addView(status, statusParams);
+        setContentView(root);
+        sendRemoteAction("status");
+    }
+
+    private void sendRemoteAction(String action) {
+        if (sessionToken.isEmpty() || connectedBaseUrl.isEmpty()) return;
+        status.setText("Отправляем команду…");
+        network.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                String path = action.equals("status") ? "/app/status" :
+                        (action.equals("start") ? "/app/remote/start" : "/app/remote/stop");
+                URL endpoint = new URL(connectedBaseUrl + path + "?token=" + Uri.encode(sessionToken));
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setRequestMethod(action.equals("status") ? "GET" : "POST");
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
+                if (!action.equals("status")) connection.setDoOutput(true);
+                int code = connection.getResponseCode();
+                java.io.InputStream input = code >= 200 && code < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                byte[] buffer = new byte[1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                JSONObject result = new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
+                if (code < 200 || code >= 300) throw new Exception("Компьютер отклонил команду");
+                boolean enabled = result.optBoolean("remote_enabled", false);
+                String message = action.equals("status")
+                        ? (enabled ? "Удалённое управление включено." : "Удалённое управление выключено.")
+                        : (enabled ? "Удалённое управление включено." : "Удалённое управление выключено.");
+                runOnUiThread(() -> status.setText(message));
+            } catch (Exception e) {
+                String message = e.getMessage() == null ? "Нет связи с компьютером" : e.getMessage();
+                runOnUiThread(() -> status.setText(message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
+
     private void connectByCode() {
         String code = codeInput.getText().toString().trim().toUpperCase(Locale.ROOT);
         if (!code.matches("[A-Z0-9]{4}")) {
@@ -369,6 +458,7 @@ public class MainActivity extends Activity {
     private void showBrowser(String url) {
         stopDiscovery();
         Uri startUri = Uri.parse(url);
+        allowRemotePage = "/remote".equals(startUri.getPath());
         allowedHost = startUri.getHost() == null ? "" : startUri.getHost().toLowerCase(Locale.ROOT);
         allowedScheme = startUri.getScheme() == null ? "" : startUri.getScheme().toLowerCase(Locale.ROOT);
         allowedPort = startUri.getPort();
@@ -395,6 +485,10 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri target = request.getUrl();
+                if ("/remote".equals(target.getPath()) && target.getQueryParameter("token") != null && !allowRemotePage) {
+                    runOnUiThread(() -> showConnectedControls(target.toString()));
+                    return true;
+                }
                 String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(Locale.ROOT);
                 String host = target.getHost() == null ? "" : target.getHost().toLowerCase(Locale.ROOT);
                 return !(scheme.equals(allowedScheme) && host.equals(allowedHost)
