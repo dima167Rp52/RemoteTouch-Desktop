@@ -37,8 +37,8 @@ class PairingManagerTests(unittest.TestCase):
         token = delivered["session_token"]
         self.assertTrue(self.manager.authenticate(token))
         self.assertEqual(
-            self.manager.pairing_status(result["request_id"]),
-            {"status": "delivered"},
+            self.manager.pairing_status(result["request_id"])["session_token"],
+            token,
         )
 
     def test_trusted_device_can_be_auto_approved(self):
