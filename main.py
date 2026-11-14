@@ -397,6 +397,7 @@ button:active,button.active {
 
 <div class="buttons">
     <button class="mouseHold" data-mouse="left">ЛКМ</button>
+    <button class="mouseHold" data-mouse="right">ПКМ</button>
 </div>
 
 <div class="buttons">
