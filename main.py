@@ -864,7 +864,7 @@ screen.addEventListener("pointerdown",event=>{
     longPressTimer=setTimeout(()=>{
         if(pointerStart && !pointerMoved) {
             longPressTriggered=true;
-            clickMouse("right");
+            clickMouse("left");
         }
     },1000);
 });
@@ -903,7 +903,7 @@ function finishScreenTouch() {
     }
 
     if(pointerStart && !pointerMoved && !longPressTriggered) {
-        clickMouse("left");
+        clickMouse("right");
     }
 
     pointerStart=null;
