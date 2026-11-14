@@ -11,7 +11,7 @@ LOOKUPS = {}
 CODE_RE = re.compile(r"^[A-Z0-9]{4}$")
 TTL = 180
 LOOKUP_WINDOW = 60
-LOOKUP_LIMIT = 18
+LOOKUP_LIMIT = 8
 
 def clean_expired(now):
     for code, item in list(DEVICES.items()):
