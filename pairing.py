@@ -36,10 +36,11 @@ class PairingManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._trusted_path = _data_dir() / "trusted_devices.json"
+        self._settings_path = _data_dir() / "settings.json"
         self._trusted = self._load_trusted()
         self._pending: dict[str, dict] = {}
         self._sessions: dict[str, dict] = {}
-        self._auto_allow_trusted = False
+        self._auto_allow_trusted = self._load_auto_allow()
 
     def _load_trusted(self) -> dict[str, dict]:
         try:
@@ -57,6 +58,25 @@ class PairingManager:
         )
         temporary.replace(self._trusted_path)
 
+    def _load_auto_allow(self) -> bool:
+        try:
+            data = json.loads(self._settings_path.read_text(encoding="utf-8"))
+            return bool(data.get("auto_allow_trusted", False))
+        except (OSError, json.JSONDecodeError, AttributeError):
+            return False
+
+    def _save_settings(self) -> None:
+        self._settings_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self._settings_path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(
+                {"auto_allow_trusted": self._auto_allow_trusted},
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        temporary.replace(self._settings_path)
+
     @staticmethod
     def _clean_name(value: object) -> str:
         name = " ".join(str(value or "Устройство").split())
@@ -73,6 +93,7 @@ class PairingManager:
     def set_auto_allow_trusted(self, enabled: bool) -> None:
         with self._lock:
             self._auto_allow_trusted = bool(enabled)
+            self._save_settings()
 
     def auto_allow_trusted(self) -> bool:
         with self._lock:
