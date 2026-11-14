@@ -145,6 +145,67 @@ h1 {
     pointer-events:none;
 }
 
+#gameControls {
+    display:none;
+    position:absolute;
+    inset:0;
+    z-index:10;
+    pointer-events:none;
+}
+
+#gameControls.visible { display:block; }
+
+#joystickBase {
+    position:absolute;
+    left:18px;
+    bottom:18px;
+    width:132px;
+    height:132px;
+    border:2px solid rgba(255,255,255,.55);
+    border-radius:50%;
+    background:rgba(15,23,42,.42);
+    pointer-events:auto;
+    touch-action:none;
+}
+
+#joystickStick {
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:58px;
+    height:58px;
+    margin:-29px 0 0 -29px;
+    border:2px solid rgba(255,255,255,.9);
+    border-radius:50%;
+    background:rgba(59,130,246,.88);
+    box-shadow:0 3px 12px #0008;
+    pointer-events:none;
+}
+
+#gameActionButtons {
+    position:absolute;
+    right:16px;
+    bottom:20px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    pointer-events:auto;
+}
+
+.gameAction {
+    width:58px;
+    height:58px;
+    min-width:58px;
+    padding:0;
+    border:2px solid rgba(255,255,255,.75);
+    border-radius:50%;
+    background:rgba(30,41,59,.82);
+    font-size:28px;
+    box-shadow:0 3px 12px #0008;
+}
+
+.gameAction.active { background:#15803d; }
+
 #cursor {
     position:absolute;
     width:25px;
@@ -324,6 +385,14 @@ button:active,button.active {
         <path d="M2 1 L2 25 L8 19 L13 31 L17 29 L12 17 L22 17 Z"
               fill="white" stroke="black" stroke-width="1.5"/>
     </svg>
+
+    <div id="gameControls">
+        <div id="joystickBase"><div id="joystickStick"></div></div>
+        <div id="gameActionButtons">
+            <button class="gameAction" id="jumpButton" aria-label="Прыжок">↑</button>
+            <button class="gameAction" id="sneakButton" aria-label="Приседание">↓</button>
+        </div>
+    </div>
 </div>
 
 <div class="buttons">
@@ -465,6 +534,11 @@ let cameraSensitivity = 1.6;
 let lastTouch = null;
 let pointerStart = null;
 let pointerMoved = false;
+let longPressTimer = null;
+let longPressTriggered = false;
+let sneakToggled = false;
+let joystickPointerId = null;
+let joystickKeys = new Set();
 
 let moveInterval = 16;
 let pendingMove = null;
@@ -587,9 +661,19 @@ function toggleGameMode() {
 
     button.style.background = gameMode ? "#15803d" : "#374151";
     cursor.style.display = gameMode ? "none" : "block";
+    document.getElementById("gameControls").classList.toggle("visible", gameMode);
+
+    if (!gameMode) {
+        releaseJoystickKeys();
+        if (sneakToggled) {
+            sendKey("SHIFT", false);
+            sneakToggled = false;
+            document.getElementById("sneakButton").classList.remove("active");
+        }
+    }
 
     statusText.textContent = gameMode
-        ? "Веди пальцем по экрану для поворота камеры"
+        ? "Джойстик — ходьба • ↑ прыжок • ↓ приседание"
         : "Обычный режим курсора";
 }
 
@@ -760,6 +844,7 @@ function toggleKeyboard() {
 }
 
 screen.addEventListener("pointerdown",event=>{
+    if (event.target.closest("#gameControls")) return;
     event.preventDefault();
 
     try {
@@ -769,58 +854,156 @@ screen.addEventListener("pointerdown",event=>{
     pointerStart={x:event.clientX,y:event.clientY};
     lastTouch={x:event.clientX,y:event.clientY};
     pointerMoved=false;
+    longPressTriggered=false;
 
     if(!gameMode) {
         const rect=image.getBoundingClientRect();
+        sendMove(event.clientX-rect.left,event.clientY-rect.top);
 
-        sendMove(
-            event.clientX-rect.left,
-            event.clientY-rect.top
-        );
+        longPressTimer=setTimeout(()=>{
+            if(pointerStart && !pointerMoved) {
+                longPressTriggered=true;
+                clickMouse("right");
+            }
+        },1000);
     }
 });
 
 screen.addEventListener("pointermove",event=>{
+    if (event.target.closest("#gameControls")) return;
     event.preventDefault();
-
     if(!pointerStart || !lastTouch) return;
 
     const dx=event.clientX-lastTouch.x;
     const dy=event.clientY-lastTouch.y;
 
-    if(Math.abs(dx)+Math.abs(dy)>2) {
+    if(Math.abs(dx)+Math.abs(dy)>5) {
         pointerMoved=true;
+        if(longPressTimer!==null) {
+            clearTimeout(longPressTimer);
+            longPressTimer=null;
+        }
     }
 
     if(gameMode) {
         sendLook(dx,dy);
     } else {
         const rect=image.getBoundingClientRect();
-
-        sendMove(
-            event.clientX-rect.left,
-            event.clientY-rect.top
-        );
+        sendMove(event.clientX-rect.left,event.clientY-rect.top);
     }
 
     lastTouch={x:event.clientX,y:event.clientY};
 });
 
-screen.addEventListener("pointerup",()=>{
+function finishScreenTouch() {
     flushNow();
+    if(longPressTimer!==null) {
+        clearTimeout(longPressTimer);
+        longPressTimer=null;
+    }
 
-    if(pointerStart && !pointerMoved) {
+    if(pointerStart && !pointerMoved && !longPressTriggered && !gameMode) {
         clickMouse("left");
     }
 
     pointerStart=null;
     lastTouch=null;
+    longPressTriggered=false;
+}
+
+screen.addEventListener("pointerup",finishScreenTouch);
+screen.addEventListener("pointercancel",finishScreenTouch);
+
+function setJoystickKeys(nextKeys) {
+    for (const key of joystickKeys) {
+        if (!nextKeys.has(key)) sendKey(key,false);
+    }
+    for (const key of nextKeys) {
+        if (!joystickKeys.has(key)) sendKey(key,true);
+    }
+    joystickKeys=nextKeys;
+}
+
+function releaseJoystickKeys() {
+    setJoystickKeys(new Set());
+    joystickPointerId=null;
+    const stick=document.getElementById("joystickStick");
+    if(stick) stick.style.transform="translate(0px,0px)";
+}
+
+function updateJoystick(event) {
+    const base=document.getElementById("joystickBase");
+    const stick=document.getElementById("joystickStick");
+    const rect=base.getBoundingClientRect();
+    const cx=rect.left+rect.width/2;
+    const cy=rect.top+rect.height/2;
+    let dx=event.clientX-cx;
+    let dy=event.clientY-cy;
+    const maxRadius=47;
+    const distance=Math.hypot(dx,dy);
+    if(distance>maxRadius) {
+        dx=dx/distance*maxRadius;
+        dy=dy/distance*maxRadius;
+    }
+    stick.style.transform="translate("+dx+"px,"+dy+"px)";
+
+    const threshold=13;
+    const next=new Set();
+    if(Math.abs(dx)>threshold) next.add(dx<0?"A":"D");
+    if(Math.abs(dy)>threshold) next.add(dy<0?"W":"S");
+    setJoystickKeys(next);
+}
+
+const joystickBase=document.getElementById("joystickBase");
+joystickBase.addEventListener("pointerdown",event=>{
+    if(!gameMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    joystickPointerId=event.pointerId;
+    joystickBase.setPointerCapture(event.pointerId);
+    updateJoystick(event);
+});
+joystickBase.addEventListener("pointermove",event=>{
+    if(event.pointerId!==joystickPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    updateJoystick(event);
+});
+function endJoystick(event) {
+    if(event.pointerId!==joystickPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseJoystickKeys();
+}
+joystickBase.addEventListener("pointerup",endJoystick);
+joystickBase.addEventListener("pointercancel",endJoystick);
+joystickBase.addEventListener("lostpointercapture",endJoystick);
+
+const jumpButton=document.getElementById("jumpButton");
+jumpButton.addEventListener("pointerdown",event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    jumpButton.classList.add("active");
+    sendKey("SPACE",true);
+    setTimeout(()=>{
+        sendKey("SPACE",false);
+        jumpButton.classList.remove("active");
+    },140);
+});
+["pointerup","pointercancel","lostpointercapture"].forEach(name=>{
+    jumpButton.addEventListener(name,event=>event.stopPropagation());
 });
 
-screen.addEventListener("pointercancel",()=>{
-    flushNow();
-    pointerStart=null;
-    lastTouch=null;
+const sneakButton=document.getElementById("sneakButton");
+sneakButton.addEventListener("pointerdown",event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    sneakToggled=!sneakToggled;
+    sendKey("SHIFT",sneakToggled);
+    sneakButton.classList.toggle("active",sneakToggled);
+});
+["pointerup","pointercancel","lostpointercapture"].forEach(name=>{
+    sneakButton.addEventListener(name,event=>event.stopPropagation());
 });
 
 screen.addEventListener("wheel",event=>{
@@ -833,6 +1016,10 @@ image.addEventListener("load",()=>{
 });
 
 window.addEventListener("pagehide",()=>{
+    releaseJoystickKeys();
+    if(sneakToggled) sendKey("SHIFT",false);
+    if(longPressTimer!==null) clearTimeout(longPressTimer);
+
     for(const key of pressedKeys) {
         sendKey(key,false);
     }
