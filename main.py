@@ -11,11 +11,13 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
+from pairing import PairingManager
 import mss
 from PIL import Image
 
 PORT = 8765
 PIN = secrets.token_urlsafe(12)
+PAIRING = PairingManager()
 
 PROFILES = {
     "local": {
@@ -843,14 +845,71 @@ updateKeyboardLabels();
 """
 
 
+PAIR_HTML = r"""<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Подключение RemoteTouch</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:#0b1220;color:#edf4ff;font-family:Segoe UI,Arial,sans-serif}
+main{width:min(100%,420px);padding:28px;border:1px solid #29405f;border-radius:20px;background:#142039;box-shadow:0 20px 70px #0006}
+h1{margin:0 0 8px;color:#7dd3fc}p{color:#a8b8d0;line-height:1.5}
+input,button{width:100%;padding:14px;border:0;border-radius:10px;font-size:15px}
+input{margin:12px 0;background:#0b1527;color:white;border:1px solid #355071}
+button{background:#2563eb;color:white;font-weight:700}
+#status{min-height:24px;margin-top:14px;color:#7dd3fc;font-size:14px}
+</style></head><body><main>
+<h1>RemoteTouch</h1><p>Запроси разрешение на подключение к компьютеру. На компьютере появится окно подтверждения.</p>
+<input id="deviceName" maxlength="48" placeholder="Название устройства" autocomplete="off">
+<button id="connect">Запросить подключение</button><div id="status"></div>
+</main><script>
+const pin = new URLSearchParams(location.search).get("pin") || "";
+const statusEl = document.getElementById("status");
+const button = document.getElementById("connect");
+let requestId = "";
+function deviceId(){
+ let id=localStorage.getItem("remotetouch_device_id");
+ if(!id){id=crypto.randomUUID();localStorage.setItem("remotetouch_device_id",id)}
+ return id;
+}
+async function poll(){
+ try{
+  const r=await fetch("/pair/status?request_id="+encodeURIComponent(requestId),{cache:"no-store"});
+  const d=await r.json();
+  if(d.status==="approved"&&d.session_token){
+   statusEl.textContent="Подключено. Открываем управление…";
+   location.replace("/remote?token="+encodeURIComponent(d.session_token));
+   return;
+  }
+  if(d.status==="denied"){statusEl.textContent="Запрос отклонён на компьютере.";button.disabled=false;return}
+  if(d.status==="expired"){statusEl.textContent="Время запроса истекло. Попробуй ещё раз.";button.disabled=false;return}
+  setTimeout(poll,1200);
+ }catch(e){statusEl.textContent="Нет связи с компьютером.";setTimeout(poll,2500)}
+}
+button.addEventListener("click",async()=>{
+ const name=document.getElementById("deviceName").value.trim()||"Телефон";
+ button.disabled=true;statusEl.textContent="Отправляем запрос…";
+ try{
+  const r=await fetch("/pair/request",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin,device_id:deviceId(),device_name:name})});
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.error||"Не удалось отправить запрос");
+  if(d.status==="approved"&&d.session_token){location.replace("/remote?token="+encodeURIComponent(d.session_token));return}
+  requestId=d.request_id;statusEl.textContent="Ожидаем подтверждения на компьютере…";poll();
+ }catch(e){statusEl.textContent=e.message;button.disabled=false}
+});
+</script></body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def authorized(self):
         query = parse_qs(urlparse(self.path).query)
-        supplied = query.get("pin", [""])[0]
+        supplied = query.get("token", [""])[0]
+        return PAIRING.authenticate(supplied)
 
-        return secrets.compare_digest(supplied, PIN)
+    def send_json(self, status, payload):
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_bytes(status, "application/json; charset=utf-8", data)
 
     def send_bytes(self, status, content_type, data):
         self.send_response(status)
@@ -861,19 +920,34 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        if path == "/":
+            supplied = query.get("pin", [""])[0]
+            if not secrets.compare_digest(supplied, PIN):
+                self.send_error(403)
+                return
+            self.send_bytes(200, "text/html; charset=utf-8", PAIR_HTML.encode("utf-8"))
+            return
+
+        if path == "/pair/status":
+            request_id = query.get("request_id", [""])[0]
+            self.send_json(200, PAIRING.pairing_status(request_id))
+            return
+
+        if path == "/remote":
+            if not self.authorized():
+                self.send_error(403)
+                return
+            token = query.get("token", [""])[0]
+            page = HTML.replace("TOKEN", token).encode("utf-8")
+            self.send_bytes(200, "text/html; charset=utf-8", page)
+            return
 
         if not self.authorized():
             self.send_error(403)
-            return
-
-        if path == "/":
-            page = HTML.replace("TOKEN", PIN).encode("utf-8")
-            self.send_bytes(
-                200,
-                "text/html; charset=utf-8",
-                page
-            )
             return
 
         if path == "/settings":
@@ -968,7 +1042,29 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
-        if urlparse(self.path).path != "/control":
+        path = urlparse(self.path).path
+
+        if path == "/pair/request":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    self.send_error(400)
+                    return
+                payload = json.loads(self.rfile.read(length))
+                supplied_pin = str(payload.get("pin", ""))
+                if not secrets.compare_digest(supplied_pin, PIN):
+                    self.send_json(403, {"error": "Неверный PIN"})
+                    return
+                result = PAIRING.request_pairing(
+                    payload.get("device_id"),
+                    payload.get("device_name"),
+                )
+                self.send_json(200, result)
+            except (ValueError, TypeError, json.JSONDecodeError, RuntimeError) as exc:
+                self.send_json(400, {"error": str(exc)})
+            return
+
+        if path != "/control":
             self.send_error(404)
             return
 
@@ -1144,9 +1240,9 @@ if __name__ == "__main__":
 
     server.daemon_threads = True
 
-    print("RemoteTouch 0.9.0")
-    print(f"Address: http://{get_local_ip()}:{PORT}")
-    print(f"PIN: {PIN}")
+    print("RemoteTouch 1.0.0")
+    print(f"Pairing address: http://{get_local_ip()}:{PORT}/?pin={PIN}")
+    print("PIN is only used to request a new device pairing.")
 
     try:
         server.serve_forever()
