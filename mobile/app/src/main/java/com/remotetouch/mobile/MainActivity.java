@@ -144,7 +144,7 @@ public class MainActivity extends Activity {
         LinearLayout codeCard = column();
         TextView codeTitle = text("Подключение через интернет", 18, TEXT, true);
         codeCard.addView(codeTitle);
-        TextView codeHint = text("Введи 4-значный код, который показан в RemoteTouch на компьютере.", 12, MUTED, false);
+        TextView codeHint = text("Введи код из 4 случайных букв и цифр, который показан в RemoteTouch на компьютере.", 12, MUTED, false);
         codeHint.setPadding(0, 6, 0, 10);
         codeCard.addView(codeHint);
         codeInput = new EditText(this);
