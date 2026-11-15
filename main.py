@@ -120,9 +120,12 @@ body {
 }
 
 .controlPanel {
+    display:flex;
+    align-items:center;
+    gap:5px;
     width:100%;
-    margin:0 auto 7px;
-    padding:6px;
+    margin:0 auto 5px;
+    padding:4px;
     border:1px solid rgba(148,163,184,.18);
     border-radius:13px;
     background:rgba(30,41,59,.94);
@@ -130,29 +133,33 @@ body {
 }
 
 .panelHeading {
+    flex:0 0 96px;
     display:block;
-    width:100%;
-    height:30px;
-    margin:0 0 5px;
-    padding:0;
+    width:96px;
+    height:38px;
+    margin:0;
+    padding:0 3px;
     background:transparent;
     color:#dbeafe;
-    font-size:13px;
-    letter-spacing:.3px;
+    font-size:12px;
+    letter-spacing:.1px;
+    white-space:nowrap;
 }
 
 .controlButtons {
     display:flex;
+    flex:1;
+    min-width:0;
     align-items:center;
     justify-content:center;
-    gap:6px;
+    gap:3px;
 }
 
 .controlButtons button {
     flex:1;
-    height:40px;
+    height:38px;
     min-width:0;
-    max-width:58px;
+    max-width:none;
     padding:0;
     border-radius:10px;
     background:#374151;
@@ -414,11 +421,12 @@ button {
 }
 
 @media (orientation:portrait) {
-    body { padding:5px; }
-    .controlPanel { padding:5px; margin-bottom:5px; }
-    .controlButtons { gap:4px; }
-    .controlButtons button { height:38px; font-size:19px; }
-    .screen { height:82dvh; min-height:460px; max-height:none; border-radius:10px; }
+    body { padding:4px; }
+    .controlPanel { padding:3px; margin-bottom:4px; gap:3px; }
+    .panelHeading { flex-basis:92px; width:92px; font-size:11px; }
+    .controlButtons { gap:2px; }
+    .controlButtons button { height:36px; font-size:17px; border-radius:8px; }
+    .screen { height:calc(100dvh - 62px); min-height:460px; max-height:none; border-radius:10px; }
     #keyboard { left:4px; right:4px; bottom:4px; max-height:66%; }
 }
 </style>
