@@ -718,17 +718,50 @@ function toggleGameMode() {
         : "Обычный режим курсора";
 }
 
-function sendMove(x,y) {
+function getImageContentRect() {
     const rect = image.getBoundingClientRect();
+    const naturalWidth = image.naturalWidth;
+    const naturalHeight = image.naturalHeight;
 
-    if (!rect.width || !rect.height) return;
+    if (!rect.width || !rect.height || !naturalWidth || !naturalHeight) {
+        return null;
+    }
 
-    const nx = Math.max(0,Math.min(1,x/rect.width));
-    const ny = Math.max(0,Math.min(1,y/rect.height));
+    // object-fit:contain adds empty black bars. Calculate the real image area.
+    const scale = Math.min(
+        rect.width / naturalWidth,
+        rect.height / naturalHeight
+    );
+    const width = naturalWidth * scale;
+    const height = naturalHeight * scale;
+
+    return {
+        left: rect.left + (rect.width - width) / 2,
+        top: rect.top + (rect.height - height) / 2,
+        width,
+        height
+    };
+}
+
+function sendMove(clientX,clientY) {
+    const content = getImageContentRect();
+    if (!content) return;
+
+    // Ignore touches in the black letterbox areas instead of sending wrong coordinates.
+    if (
+        clientX < content.left ||
+        clientX > content.left + content.width ||
+        clientY < content.top ||
+        clientY > content.top + content.height
+    ) return;
+
+    const nx = (clientX - content.left) / content.width;
+    const ny = (clientY - content.top) / content.height;
+    const screenRect = screen.getBoundingClientRect();
 
     cursor.style.display = "block";
-    cursor.style.left = (nx*rect.width)+"px";
-    cursor.style.top = (ny*rect.height)+"px";
+    cursor.style.left = (content.left - screenRect.left + nx * content.width - 2) + "px";
+    cursor.style.top = (content.top - screenRect.top + ny * content.height - 1) + "px";
 
     pendingMove = {x:nx,y:ny};
     scheduleMovement();
@@ -907,8 +940,7 @@ screen.addEventListener("pointerdown",event=>{
     longPressTriggered=false;
 
     if(!gameMode) {
-        const rect=image.getBoundingClientRect();
-        sendMove(event.clientX-rect.left,event.clientY-rect.top);
+        sendMove(event.clientX,event.clientY);
 
         // В обычном режиме отправляем один клик ЛКМ через 0,1 секунды после касания.
         setTimeout(()=>{
@@ -945,8 +977,7 @@ screen.addEventListener("pointermove",event=>{
     if(gameMode) {
         sendLook(dx,dy);
     } else {
-        const rect=image.getBoundingClientRect();
-        sendMove(event.clientX-rect.left,event.clientY-rect.top);
+        sendMove(event.clientX,event.clientY);
     }
 
     lastTouch={x:event.clientX,y:event.clientY};
