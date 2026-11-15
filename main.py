@@ -860,8 +860,10 @@ screen.addEventListener("pointerdown",event=>{
         const rect=image.getBoundingClientRect();
         sendMove(event.clientX-rect.left,event.clientY-rect.top);
 
-        // В обычном режиме касание экрана — один обычный клик ЛКМ.
-        send({action:"click",button:"left"});
+        // В обычном режиме отправляем один клик ЛКМ через 0,1 секунды после касания.
+        setTimeout(()=>{
+            send({action:"click",button:"left"});
+        },100);
     } else {
         // В игровом режиме ЛКМ зажимается после 0,1 секунды удержания.
         longPressTimer=setTimeout(()=>{
