@@ -1,0 +1,67 @@
+name: Build RemoteTouch Desktop for Windows
+
+on:
+  push:
+    branches:
+      - remotetouch-v2-desktop
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Compile Python files
+        run: python -m compileall -q .
+
+      - name: Run pairing tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build Windows executable
+        run: >
+          pyinstaller
+          --noconfirm
+          --clean
+          --onefile
+          --windowed
+          --name RemoteTouch-Desktop
+          --collect-all PySide6
+          --collect-all shiboken6
+          --hidden-import PIL.ImageQt
+          --hidden-import mss
+          app.py
+
+      - name: Upload downloadable EXE
+        if: startsWith(github.ref, 'refs/heads/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: RemoteTouch-Desktop-Windows-x64
+          path: dist/RemoteTouch-Desktop.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/RemoteTouch-Desktop.exe

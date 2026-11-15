@@ -11,11 +11,13 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
+from pairing import PairingManager
 import mss
 from PIL import Image
 
 PORT = 8765
 PIN = secrets.token_urlsafe(12)
+PAIRING = PairingManager()
 
 PROFILES = {
     "local": {
@@ -35,6 +37,7 @@ PROFILES = {
 settings_lock = threading.Lock()
 current_mode = "auto"
 funnel_active = False
+remote_enabled = False
 
 user32 = ctypes.windll.user32
 
@@ -68,6 +71,17 @@ def set_mode(mode, funnel=False):
         funnel_active = bool(funnel)
 
 
+def set_remote_enabled(enabled):
+    global remote_enabled
+    with settings_lock:
+        remote_enabled = bool(enabled)
+
+
+def is_remote_enabled():
+    with settings_lock:
+        return remote_enabled
+
+
 def get_profile():
     with settings_lock:
         mode = current_mode
@@ -96,28 +110,77 @@ HTML = r"""<!DOCTYPE html>
 
 body {
     margin:0;
-    padding:10px;
+    padding:7px;
     background:#111827;
     color:white;
     font-family:Arial,sans-serif;
     text-align:center;
     user-select:none;
+    -webkit-user-select:none;
 }
 
-h1 {
-    color:#60a5fa;
-    margin:6px;
+.controlPanel {
+    display:flex;
+    align-items:center;
+    gap:5px;
+    width:100%;
+    margin:0 auto 5px;
+    padding:4px;
+    border:1px solid rgba(148,163,184,.18);
+    border-radius:13px;
+    background:rgba(30,41,59,.94);
+    box-shadow:0 4px 14px #0005;
 }
 
-.subtitle {
-    color:#94a3b8;
-    font-size:12px;
+.panelHeading {
+    flex:0 0 38px;
+    display:block;
+    width:38px;
+    height:38px;
+    margin:0;
+    padding:0;
+    background:transparent;
+    color:#dbeafe;
+    font-size:21px;
 }
+
+.controlButtons {
+    display:flex;
+    flex:1;
+    min-width:0;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+}
+
+.controlButtons button {
+    flex:1;
+    height:38px;
+    min-width:0;
+    max-width:none;
+    padding:0;
+    border-radius:10px;
+    background:#374151;
+    color:white;
+    font-size:21px;
+    line-height:1;
+    touch-action:none;
+}
+
+.controlButtons button:active,
+.controlButtons button.active { background:#2563eb; }
+.controlButtons.collapsed { display:none; }
+
+#gameModeToggle { background:#166534; }
+#languageToggle { background:#0f766e; }
 
 .screen {
     position:relative;
     width:100%;
-    margin-top:12px;
+    height:80dvh;
+    min-height:440px;
+    max-height:1000px;
+    margin:0;
     overflow:hidden;
     border-radius:12px;
     background:black;
@@ -126,10 +189,72 @@ h1 {
 
 #screenImage {
     width:100%;
-    height:auto;
+    height:100%;
+    object-fit:contain;
     display:block;
     pointer-events:none;
 }
+
+#gameControls {
+    display:none;
+    position:absolute;
+    inset:0;
+    z-index:10;
+    pointer-events:none;
+}
+
+#gameControls.visible { display:block; }
+
+#joystickBase {
+    position:absolute;
+    left:18px;
+    bottom:18px;
+    width:clamp(90px, 28vw, 132px);
+    height:clamp(90px, 28vw, 132px);
+    border:2px solid rgba(255,255,255,.55);
+    border-radius:50%;
+    background:rgba(15,23,42,.42);
+    pointer-events:auto;
+    touch-action:none;
+}
+
+#joystickStick {
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:58px;
+    height:58px;
+    margin:-29px 0 0 -29px;
+    border:2px solid rgba(255,255,255,.9);
+    border-radius:50%;
+    background:rgba(59,130,246,.88);
+    box-shadow:0 3px 12px #0008;
+    pointer-events:none;
+}
+
+#gameActionButtons {
+    position:absolute;
+    right:12px;
+    bottom:16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    pointer-events:auto;
+}
+
+.gameAction {
+    width:54px;
+    height:54px;
+    min-width:54px;
+    padding:0;
+    border:2px solid rgba(255,255,255,.75);
+    border-radius:50%;
+    background:rgba(30,41,59,.82);
+    font-size:27px;
+    box-shadow:0 3px 12px #0008;
+}
+
+.gameAction.active { background:#15803d; }
 
 #cursor {
     position:absolute;
@@ -142,83 +267,81 @@ h1 {
     z-index:5;
 }
 
-.buttons,.scroll-buttons {
-    display:flex;
-    gap:8px;
-    margin-top:10px;
-}
-
 button {
     border:0;
     border-radius:8px;
-    padding:12px 5px;
-    background:#374151;
     color:white;
-    font-size:14px;
     font-weight:bold;
     touch-action:none;
     min-width:0;
 }
 
-.buttons button,.scroll-buttons button {
-    flex:1;
-}
-
-button:active,button.active {
-    background:#2563eb;
-}
-
 #keyboardToggle {
-    width:100%;
-    margin-top:12px;
-    background:#2563eb;
-    padding:13px;
+    position:absolute;
+    top:8px;
+    right:8px;
+    z-index:35;
+    width:43px;
+    height:43px;
+    padding:0;
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:12px;
+    background:rgba(37,99,235,.58);
+    color:white;
+    font-size:23px;
+    backdrop-filter:blur(7px);
+    -webkit-backdrop-filter:blur(7px);
 }
 
 #keyboard {
     display:none;
-    margin-top:10px;
-    padding:8px;
-    background:#1f2937;
+    position:absolute;
+    left:6px;
+    right:6px;
+    bottom:6px;
+    z-index:30;
+    max-height:68%;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    padding:6px;
+    border:1px solid rgba(255,255,255,.28);
+    background:rgba(15,23,42,.58);
     border-radius:12px;
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
+    touch-action:pan-y;
 }
 
-#keyboard.visible {
-    display:block;
-}
+#keyboard.visible { display:block; }
 
 .keyrow {
     display:flex;
-    gap:4px;
-    margin-bottom:5px;
+    gap:3px;
+    margin-bottom:4px;
     justify-content:center;
+    min-width:0;
 }
 
 .key {
     flex:1;
     min-width:0;
-    padding:12px 2px;
-    font-size:13px;
+    padding:clamp(5px, 1.5vw, 8px) 1px;
+    min-height:34px;
+    border-radius:6px;
+    background:rgba(55,65,81,.72);
+    color:white;
+    font-size:clamp(9px, 2.6vw, 13px);
 }
 
-.key.wide {
-    flex:1.7;
-    font-size:11px;
-}
-
-.key.space {
-    flex:5;
-}
-
-#languageToggle {
-    flex:1.5;
-    background:#0f766e;
-}
+.key.wide { flex:1.7; font-size:10px; }
+.key.space { flex:5; }
+.key:active,.key.active { background:rgba(37,99,235,.82); }
 
 .status {
+    display:none;
     color:#86efac;
     font-size:12px;
-    margin:12px 0;
+    margin:8px 0;
 }
 
 #sensitivityOverlay {
@@ -232,9 +355,7 @@ button:active,button.active {
     padding:20px;
 }
 
-#sensitivityOverlay.visible {
-    display:flex;
-}
+#sensitivityOverlay.visible { display:flex; }
 
 .sensitivityPanel {
     position:relative;
@@ -253,6 +374,7 @@ button:active,button.active {
     height:36px;
     padding:0;
     font-size:22px;
+    background:#374151;
 }
 
 .sensitivityTitle {
@@ -276,13 +398,12 @@ button:active,button.active {
 .sensitivityControls button {
     width:48px;
     min-width:48px;
+    padding:10px;
     font-size:20px;
+    background:#374151;
 }
 
-#sensitivityRange {
-    flex:1;
-    min-width:0;
-}
+#sensitivityRange { flex:1; min-width:0; }
 
 .sensitivityPresets {
     display:flex;
@@ -294,73 +415,56 @@ button:active,button.active {
     flex:1;
     padding:10px 3px;
     font-size:12px;
+    background:#374151;
+}
+
+@media (orientation:portrait) {
+    body { padding:4px; }
+    .controlPanel { padding:3px; margin-bottom:4px; gap:3px; }
+    .panelHeading { flex-basis:36px; width:36px; height:36px; font-size:19px; }
+    .controlButtons { gap:2px; }
+    .controlButtons button { height:36px; font-size:17px; border-radius:8px; }
+    .screen { height:calc(100dvh - 62px); min-height:460px; max-height:none; border-radius:10px; }
+    #keyboard { left:4px; right:4px; bottom:4px; max-height:66%; }
 }
 </style>
 </head>
 
 <body>
 
-<h1>RemoteTouch</h1>
-<div class="subtitle">Version 0.9.0 • SMART PERFORMANCE</div>
+<div class="controlPanel" aria-label="Панель управления">
+    <button class="panelHeading" id="panelToggle" onclick="toggleControlPanel()" aria-expanded="true" title="Панель управления" aria-label="Панель управления">⚙️</button>
+    <div class="controlButtons" id="controlButtons">
+        <button class="mouseHold" data-mouse="left" title="Левая кнопка мыши" aria-label="Левая кнопка мыши">◀️</button>
+        <button class="mouseHold" data-mouse="right" title="Правая кнопка мыши" aria-label="Правая кнопка мыши">▶️</button>
+        <button id="gameModeToggle" onclick="toggleGameMode()" title="Игровой режим" aria-label="Игровой режим">🎮</button>
+        <button id="languageToggle" onclick="switchLanguage()" title="Сменить язык" aria-label="Сменить язык">🌐</button>
+        <button onclick="scrollMouse(120)" title="Прокрутка вверх" aria-label="Прокрутка вверх">⬆️</button>
+        <button onclick="openSensitivity()" title="Чувствительность" aria-label="Чувствительность">🎯</button>
+        <button onclick="scrollMouse(-120)" title="Прокрутка вниз" aria-label="Прокрутка вниз">⬇️</button>
+    </div>
+</div>
 
 <div class="screen" id="screen">
-    <img id="screenImage" src="/stream?pin=TOKEN">
+    <img id="screenImage" src="/stream?token=TOKEN">
 
     <svg id="cursor" viewBox="0 0 25 33">
         <path d="M2 1 L2 25 L8 19 L13 31 L17 29 L12 17 L22 17 Z"
               fill="white" stroke="black" stroke-width="1.5"/>
     </svg>
-</div>
 
-<div class="buttons">
-    <button class="mouseHold" data-mouse="left">ЛКМ</button>
-    <button class="mouseHold" data-mouse="right">ПКМ</button>
-</div>
-
-<div class="buttons">
-    <button id="gameModeToggle" onclick="toggleGameMode()">🎮 РЕЖИМ ИГРЫ: ВЫКЛ</button>
-</div>
-
-<div class="buttons">
-    <button id="languageToggle" onclick="switchLanguage()">🌐 RU / EN</button>
-</div>
-
-<div class="scroll-buttons">
-    <button onclick="scrollMouse(120)">▲ Вверх</button>
-    <button onclick="openSensitivity()">🎯 ЧУВСТВИТЕЛЬНОСТЬ</button>
-    <button onclick="scrollMouse(-120)">▼ Вниз</button>
-</div>
-
-<div id="sensitivityOverlay" onclick="overlayBackgroundClick(event)">
-    <div class="sensitivityPanel">
-        <button id="sensitivityClose" onclick="closeSensitivity()">×</button>
-
-        <div class="sensitivityTitle">Чувствительность камеры</div>
-
-        <div class="sensitivityValue" id="sensitivityValue">1.6×</div>
-
-        <div class="sensitivityControls">
-            <button onclick="changeSensitivity(-0.1)">−</button>
-
-            <input id="sensitivityRange" type="range"
-                   min="0.4" max="5" step="0.1"
-                   value="1.6" oninput="setSensitivity(this.value)">
-
-            <button onclick="changeSensitivity(0.1)">+</button>
-        </div>
-
-        <div class="sensitivityPresets">
-            <button onclick="setSensitivity(0.8)">0.8×</button>
-            <button onclick="setSensitivity(1.6)">1.6×</button>
-            <button onclick="setSensitivity(2.5)">2.5×</button>
-            <button onclick="setSensitivity(4)">4×</button>
+    <div id="gameControls">
+        <div id="joystickBase"><div id="joystickStick"></div></div>
+        <div id="gameActionButtons">
+            <button class="gameAction" id="jumpButton" aria-label="Прыжок">↑</button>
+            <button class="gameAction" id="sneakButton" aria-label="Приседание">↓</button>
         </div>
     </div>
-</div>
 
-<button id="keyboardToggle" onclick="toggleKeyboard()">⌨ ПОКАЗАТЬ КЛАВИАТУРУ</button>
+    <button id="keyboardToggle" onclick="toggleKeyboard()" title="Показать клавиатуру" aria-label="Показать клавиатуру" aria-pressed="false">⌨️</button>
 
-<div id="keyboard">
+    <div id="keyboard">
+
     <div class="keyrow">
         <button class="key" data-key="ESC">ESC</button>
         <button class="key" data-key="TAB">TAB</button>
@@ -433,6 +537,25 @@ button:active,button.active {
         <button class="key" data-key="RIGHT">→</button>
         <button class="key" data-key="SLASH">/</button>
     </div>
+    </div>
+</div>
+
+<div id="sensitivityOverlay" onclick="overlayBackgroundClick(event)">
+    <div class="sensitivityPanel">
+        <button id="sensitivityClose" onclick="closeSensitivity()" aria-label="Закрыть">✕</button>
+        <div class="sensitivityTitle">Чувствительность камеры</div>
+        <div class="sensitivityValue" id="sensitivityValue">1.6×</div>
+        <div class="sensitivityControls">
+            <button onclick="changeSensitivity(-0.1)" aria-label="Уменьшить">−</button>
+            <input id="sensitivityRange" type="range" min="0.4" max="5" step="0.1" value="1.6" oninput="setSensitivity(this.value)">
+            <button onclick="changeSensitivity(0.1)" aria-label="Увеличить">+</button>
+        </div>
+        <div class="sensitivityPresets">
+            <button onclick="setSensitivity(0.8)">Медленно</button>
+            <button onclick="setSensitivity(1.6)">Обычно</button>
+            <button onclick="setSensitivity(3)">Быстро</button>
+        </div>
+    </div>
 </div>
 
 <div class="status" id="status">Управление готово</div>
@@ -451,6 +574,11 @@ let cameraSensitivity = 1.6;
 let lastTouch = null;
 let pointerStart = null;
 let pointerMoved = false;
+let longPressTimer = null;
+let longPressTriggered = false;
+let sneakToggled = false;
+let joystickPointerId = null;
+let joystickKeys = new Set();
 
 let moveInterval = 16;
 let pendingMove = null;
@@ -467,7 +595,7 @@ const russianLabels = {
 };
 
 function send(command) {
-    fetch("/control?pin=" + encodeURIComponent(PIN), {
+    fetch("/control?token=" + encodeURIComponent(PIN), {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(command),
@@ -522,7 +650,7 @@ function flushNow() {
 async function updateRemoteSettings() {
     try {
         const response = await fetch(
-            "/settings?pin=" + encodeURIComponent(PIN),
+            "/settings?token=" + encodeURIComponent(PIN),
             {cache:"no-store"}
         );
 
@@ -547,8 +675,9 @@ function updateKeyboardLabels() {
         }
     });
 
-    document.getElementById("languageToggle").textContent =
-        currentLanguage === "RU" ? "🌐 RU → EN" : "🌐 EN → RU";
+    document.getElementById("languageToggle").textContent = "🌐";
+    document.getElementById("languageToggle").title =
+        currentLanguage === "RU" ? "Русская раскладка" : "Английская раскладка";
 }
 
 function switchLanguage() {
@@ -567,29 +696,72 @@ function toggleGameMode() {
 
     const button = document.getElementById("gameModeToggle");
 
-    button.textContent = gameMode
-        ? "🎮 РЕЖИМ ИГРЫ: ВКЛ"
-        : "🎮 РЕЖИМ ИГРЫ: ВЫКЛ";
+    button.textContent = gameMode ? "🎮🟢" : "🎮";
+    button.title = gameMode ? "Выключить игровой режим" : "Включить игровой режим";
+    button.setAttribute("aria-label", button.title);
 
     button.style.background = gameMode ? "#15803d" : "#374151";
     cursor.style.display = gameMode ? "none" : "block";
+    document.getElementById("gameControls").classList.toggle("visible", gameMode);
+
+    if (!gameMode) {
+        releaseJoystickKeys();
+        if (sneakToggled) {
+            sendKey("SHIFT", false);
+            sneakToggled = false;
+            document.getElementById("sneakButton").classList.remove("active");
+        }
+    }
 
     statusText.textContent = gameMode
-        ? "Веди пальцем по экрану для поворота камеры"
+        ? "Джойстик — ходьба • ↑ прыжок • ↓ приседание"
         : "Обычный режим курсора";
 }
 
-function sendMove(x,y) {
+function getImageContentRect() {
     const rect = image.getBoundingClientRect();
+    const naturalWidth = image.naturalWidth;
+    const naturalHeight = image.naturalHeight;
 
-    if (!rect.width || !rect.height) return;
+    if (!rect.width || !rect.height || !naturalWidth || !naturalHeight) {
+        return null;
+    }
 
-    const nx = Math.max(0,Math.min(1,x/rect.width));
-    const ny = Math.max(0,Math.min(1,y/rect.height));
+    // object-fit:contain adds empty black bars. Calculate the real image area.
+    const scale = Math.min(
+        rect.width / naturalWidth,
+        rect.height / naturalHeight
+    );
+    const width = naturalWidth * scale;
+    const height = naturalHeight * scale;
+
+    return {
+        left: rect.left + (rect.width - width) / 2,
+        top: rect.top + (rect.height - height) / 2,
+        width,
+        height
+    };
+}
+
+function sendMove(clientX,clientY) {
+    const content = getImageContentRect();
+    if (!content) return;
+
+    // Ignore touches in the black letterbox areas instead of sending wrong coordinates.
+    if (
+        clientX < content.left ||
+        clientX > content.left + content.width ||
+        clientY < content.top ||
+        clientY > content.top + content.height
+    ) return;
+
+    const nx = (clientX - content.left) / content.width;
+    const ny = (clientY - content.top) / content.height;
+    const screenRect = screen.getBoundingClientRect();
 
     cursor.style.display = "block";
-    cursor.style.left = (nx*rect.width)+"px";
-    cursor.style.top = (ny*rect.height)+"px";
+    cursor.style.left = (content.left - screenRect.left + nx * content.width - 2) + "px";
+    cursor.style.top = (content.top - screenRect.top + ny * content.height - 1) + "px";
 
     pendingMove = {x:nx,y:ny};
     scheduleMovement();
@@ -734,18 +906,28 @@ document.querySelectorAll(".key[data-key]").forEach(button=>{
     button.addEventListener("lostpointercapture",release);
 });
 
+function toggleControlPanel() {
+    const controls=document.getElementById("controlButtons");
+    const heading=document.getElementById("panelToggle");
+    const collapsed=controls.classList.toggle("collapsed");
+    heading.setAttribute("aria-expanded",String(!collapsed));
+}
+
 function toggleKeyboard() {
     const keyboard=document.getElementById("keyboard");
 
     keyboard.classList.toggle("visible");
 
-    document.getElementById("keyboardToggle").textContent =
-        keyboard.classList.contains("visible")
-        ? "⌨ СКРЫТЬ КЛАВИАТУРУ"
-        : "⌨ ПОКАЗАТЬ КЛАВИАТУРУ";
+    const opened = keyboard.classList.contains("visible");
+    const toggle = document.getElementById("keyboardToggle");
+    toggle.textContent = opened ? "✕" : "⌨️";
+    toggle.title = opened ? "Скрыть клавиатуру" : "Показать клавиатуру";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-pressed", String(opened));
 }
 
 screen.addEventListener("pointerdown",event=>{
+    if (event.target.closest("#gameControls, #keyboard, #keyboardToggle")) return;
     event.preventDefault();
 
     try {
@@ -755,58 +937,162 @@ screen.addEventListener("pointerdown",event=>{
     pointerStart={x:event.clientX,y:event.clientY};
     lastTouch={x:event.clientX,y:event.clientY};
     pointerMoved=false;
+    longPressTriggered=false;
 
     if(!gameMode) {
-        const rect=image.getBoundingClientRect();
+        sendMove(event.clientX,event.clientY);
 
-        sendMove(
-            event.clientX-rect.left,
-            event.clientY-rect.top
-        );
+        // В обычном режиме отправляем один клик ЛКМ через 0,1 секунды после касания.
+        setTimeout(()=>{
+            send({action:"click",button:"left"});
+        },100);
+    } else {
+        // Удержание срабатывает только если палец оставался неподвижным все 0,1 секунды.
+        longPressTimer=setTimeout(()=>{
+            if(pointerStart && !pointerMoved && !longPressTriggered) {
+                longPressTriggered=true;
+                send({action:"click",button:"left",pressed:true});
+            }
+            longPressTimer=null;
+        },100);
     }
 });
 
 screen.addEventListener("pointermove",event=>{
+    if (event.target.closest("#gameControls")) return;
     event.preventDefault();
-
     if(!pointerStart || !lastTouch) return;
 
     const dx=event.clientX-lastTouch.x;
     const dy=event.clientY-lastTouch.y;
 
-    if(Math.abs(dx)+Math.abs(dy)>2) {
+    if(Math.abs(dx)+Math.abs(dy)>5) {
         pointerMoved=true;
+        if(gameMode && longPressTimer!==null) {
+            clearTimeout(longPressTimer);
+            longPressTimer=null;
+        }
     }
 
     if(gameMode) {
         sendLook(dx,dy);
     } else {
-        const rect=image.getBoundingClientRect();
-
-        sendMove(
-            event.clientX-rect.left,
-            event.clientY-rect.top
-        );
+        sendMove(event.clientX,event.clientY);
     }
 
     lastTouch={x:event.clientX,y:event.clientY};
 });
 
-screen.addEventListener("pointerup",()=>{
+function finishScreenTouch() {
     flushNow();
+    if(longPressTimer!==null) {
+        clearTimeout(longPressTimer);
+        longPressTimer=null;
+    }
 
-    if(pointerStart && !pointerMoved) {
-        clickMouse("left");
+    // Отпускаем ЛКМ сразу при отпускании пальца.
+    if(longPressTriggered) {
+        send({action:"click",button:"left",pressed:false});
     }
 
     pointerStart=null;
     lastTouch=null;
+    longPressTriggered=false;
+}
+
+screen.addEventListener("pointerup",finishScreenTouch);
+screen.addEventListener("pointercancel",finishScreenTouch);
+
+function setJoystickKeys(nextKeys) {
+    for (const key of joystickKeys) {
+        if (!nextKeys.has(key)) sendKey(key,false);
+    }
+    for (const key of nextKeys) {
+        if (!joystickKeys.has(key)) sendKey(key,true);
+    }
+    joystickKeys=nextKeys;
+}
+
+function releaseJoystickKeys() {
+    setJoystickKeys(new Set());
+    joystickPointerId=null;
+    const stick=document.getElementById("joystickStick");
+    if(stick) stick.style.transform="translate(0px,0px)";
+}
+
+function updateJoystick(event) {
+    const base=document.getElementById("joystickBase");
+    const stick=document.getElementById("joystickStick");
+    const rect=base.getBoundingClientRect();
+    const cx=rect.left+rect.width/2;
+    const cy=rect.top+rect.height/2;
+    let dx=event.clientX-cx;
+    let dy=event.clientY-cy;
+    const maxRadius=47;
+    const distance=Math.hypot(dx,dy);
+    if(distance>maxRadius) {
+        dx=dx/distance*maxRadius;
+        dy=dy/distance*maxRadius;
+    }
+    stick.style.transform="translate("+dx+"px,"+dy+"px)";
+
+    const threshold=13;
+    const next=new Set();
+    if(Math.abs(dx)>threshold) next.add(dx<0?"A":"D");
+    if(Math.abs(dy)>threshold) next.add(dy<0?"W":"S");
+    setJoystickKeys(next);
+}
+
+const joystickBase=document.getElementById("joystickBase");
+joystickBase.addEventListener("pointerdown",event=>{
+    if(!gameMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    joystickPointerId=event.pointerId;
+    joystickBase.setPointerCapture(event.pointerId);
+    updateJoystick(event);
+});
+joystickBase.addEventListener("pointermove",event=>{
+    if(event.pointerId!==joystickPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    updateJoystick(event);
+});
+function endJoystick(event) {
+    if(event.pointerId!==joystickPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseJoystickKeys();
+}
+joystickBase.addEventListener("pointerup",endJoystick);
+joystickBase.addEventListener("pointercancel",endJoystick);
+joystickBase.addEventListener("lostpointercapture",endJoystick);
+
+const jumpButton=document.getElementById("jumpButton");
+jumpButton.addEventListener("pointerdown",event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    jumpButton.classList.add("active");
+    sendKey("SPACE",true);
+    setTimeout(()=>{
+        sendKey("SPACE",false);
+        jumpButton.classList.remove("active");
+    },140);
+});
+["pointerup","pointercancel","lostpointercapture"].forEach(name=>{
+    jumpButton.addEventListener(name,event=>event.stopPropagation());
 });
 
-screen.addEventListener("pointercancel",()=>{
-    flushNow();
-    pointerStart=null;
-    lastTouch=null;
+const sneakButton=document.getElementById("sneakButton");
+sneakButton.addEventListener("pointerdown",event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    sneakToggled=!sneakToggled;
+    sendKey("SHIFT",sneakToggled);
+    sneakButton.classList.toggle("active",sneakToggled);
+});
+["pointerup","pointercancel","lostpointercapture"].forEach(name=>{
+    sneakButton.addEventListener(name,event=>event.stopPropagation());
 });
 
 screen.addEventListener("wheel",event=>{
@@ -819,6 +1105,10 @@ image.addEventListener("load",()=>{
 });
 
 window.addEventListener("pagehide",()=>{
+    releaseJoystickKeys();
+    if(sneakToggled) sendKey("SHIFT",false);
+    if(longPressTimer!==null) clearTimeout(longPressTimer);
+
     for(const key of pressedKeys) {
         sendKey(key,false);
     }
@@ -843,14 +1133,79 @@ updateKeyboardLabels();
 """
 
 
+PAIR_HTML = r"""<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Подключение RemoteTouch</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:#0b1220;color:#edf4ff;font-family:Segoe UI,Arial,sans-serif}
+main{width:min(100%,420px);padding:28px;border:1px solid #29405f;border-radius:20px;background:#142039;box-shadow:0 20px 70px #0006}
+h1{margin:0 0 8px;color:#7dd3fc}p{color:#a8b8d0;line-height:1.5}
+input,button{width:100%;padding:14px;border:0;border-radius:10px;font-size:15px}
+input{margin:12px 0;background:#0b1527;color:white;border:1px solid #355071}
+button{background:#2563eb;color:white;font-weight:700}
+#status{min-height:24px;margin-top:14px;color:#7dd3fc;font-size:14px}
+</style></head><body><main>
+<h1>RemoteTouch</h1><p>Запроси разрешение на подключение к компьютеру. На компьютере появится окно подтверждения.</p>
+<input id="deviceName" maxlength="48" placeholder="Название устройства" autocomplete="off">
+<button id="connect">Запросить подключение</button><div id="status"></div>
+</main><script>
+const pin = new URLSearchParams(location.search).get("pin") || "";
+const statusEl = document.getElementById("status");
+const button = document.getElementById("connect");
+let requestId = "";
+function deviceId(){
+ let id=localStorage.getItem("remotetouch_device_id");
+ if(!id){
+  id=(window.crypto&&crypto.randomUUID)
+   ? crypto.randomUUID()
+   : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{
+      const r=Math.random()*16|0;
+      return (c==="x"?r:(r&3|8)).toString(16);
+     });
+  localStorage.setItem("remotetouch_device_id",id);
+ }
+ return id;
+}
+async function poll(){
+ try{
+  const r=await fetch("/pair/status?request_id="+encodeURIComponent(requestId),{cache:"no-store"});
+  const d=await r.json();
+  if(d.status==="approved"&&d.session_token){
+   statusEl.textContent="Подключено. Открываем управление…";
+   location.replace("/remote?token="+encodeURIComponent(d.session_token));
+   return;
+  }
+  if(d.status==="denied"){statusEl.textContent="Запрос отклонён на компьютере.";button.disabled=false;return}
+  if(d.status==="expired"){statusEl.textContent="Время запроса истекло. Попробуй ещё раз.";button.disabled=false;return}
+  setTimeout(poll,1200);
+ }catch(e){statusEl.textContent="Нет связи с компьютером.";setTimeout(poll,2500)}
+}
+button.addEventListener("click",async()=>{
+ const name=document.getElementById("deviceName").value.trim()||"Телефон";
+ button.disabled=true;statusEl.textContent="Отправляем запрос…";
+ try{
+  const r=await fetch("/pair/request",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin,device_id:deviceId(),device_name:name})});
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.error||"Не удалось отправить запрос");
+  if(d.status==="approved"&&d.session_token){location.replace("/remote?token="+encodeURIComponent(d.session_token));return}
+  requestId=d.request_id;statusEl.textContent="Ожидаем подтверждения на компьютере…";poll();
+ }catch(e){statusEl.textContent=e.message;button.disabled=false}
+});
+</script></body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def authorized(self):
         query = parse_qs(urlparse(self.path).query)
-        supplied = query.get("pin", [""])[0]
+        supplied = query.get("token", [""])[0]
+        return PAIRING.authenticate(supplied)
 
-        return secrets.compare_digest(supplied, PIN)
+    def send_json(self, status, payload):
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_bytes(status, "application/json; charset=utf-8", data)
 
     def send_bytes(self, status, content_type, data):
         self.send_response(status)
@@ -861,19 +1216,38 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        if path == "/":
+            supplied = query.get("pin", [""])[0]
+            if not secrets.compare_digest(supplied, PIN):
+                self.send_error(403)
+                return
+            self.send_bytes(200, "text/html; charset=utf-8", PAIR_HTML.encode("utf-8"))
+            return
+
+        if path == "/pair/status":
+            request_id = query.get("request_id", [""])[0]
+            self.send_json(200, PAIRING.pairing_status(request_id))
+            return
+
+        if path == "/remote":
+            if not self.authorized():
+                self.send_error(403)
+                return
+            token = query.get("token", [""])[0]
+            page = HTML.replace("TOKEN", token).encode("utf-8")
+            self.send_bytes(200, "text/html; charset=utf-8", page)
+            return
 
         if not self.authorized():
             self.send_error(403)
             return
 
-        if path == "/":
-            page = HTML.replace("TOKEN", PIN).encode("utf-8")
-            self.send_bytes(
-                200,
-                "text/html; charset=utf-8",
-                page
-            )
+        if path == "/app/status":
+            self.send_json(200, {"remote_enabled": is_remote_enabled()})
             return
 
         if path == "/settings":
@@ -888,6 +1262,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/stream":
+            if not is_remote_enabled():
+                self.send_error(409, "Remote streaming is stopped")
+                return
             self.send_response(200)
 
             self.send_header(
@@ -905,7 +1282,7 @@ class Handler(BaseHTTPRequestHandler):
                 with mss.mss() as capture:
                     monitor = capture.monitors[1]
 
-                    while True:
+                    while is_remote_enabled():
                         start = time.perf_counter()
 
                         shot = capture.grab(monitor)
@@ -968,12 +1345,46 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
-        if urlparse(self.path).path != "/control":
+        path = urlparse(self.path).path
+
+        if path == "/pair/request":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    self.send_error(400)
+                    return
+                payload = json.loads(self.rfile.read(length))
+                supplied_pin = str(payload.get("pin", ""))
+                if not secrets.compare_digest(supplied_pin, PIN):
+                    self.send_json(403, {"error": "Неверный PIN"})
+                    return
+                result = PAIRING.request_pairing(
+                    payload.get("device_id"),
+                    payload.get("device_name"),
+                )
+                self.send_json(200, result)
+            except (ValueError, TypeError, json.JSONDecodeError, RuntimeError) as exc:
+                self.send_json(400, {"error": str(exc)})
+            return
+
+        if path in ("/app/remote/start", "/app/remote/stop"):
+            if not self.authorized():
+                self.send_error(403)
+                return
+            set_remote_enabled(path.endswith("/start"))
+            self.send_json(200, {"remote_enabled": is_remote_enabled()})
+            return
+
+        if path != "/control":
             self.send_error(404)
             return
 
         if not self.authorized():
             self.send_error(403)
+            return
+
+        if not is_remote_enabled():
+            self.send_error(409, "Remote control is stopped")
             return
 
         try:
@@ -1144,9 +1555,9 @@ if __name__ == "__main__":
 
     server.daemon_threads = True
 
-    print("RemoteTouch 0.9.0")
-    print(f"Address: http://{get_local_ip()}:{PORT}")
-    print(f"PIN: {PIN}")
+    print("RemoteTouch 1.0.0")
+    print(f"Pairing address: http://{get_local_ip()}:{PORT}/?pin={PIN}")
+    print("PIN is only used to request a new device pairing.")
 
     try:
         server.serve_forever()

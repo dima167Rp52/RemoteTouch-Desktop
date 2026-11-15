@@ -6,6 +6,11 @@ import webbrowser
 import shutil
 import os
 import re
+import json
+import time
+import secrets
+import string
+import urllib.request
 
 import qrcode
 from PIL.ImageQt import ImageQt
@@ -32,7 +37,9 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QMessageBox,
     QGraphicsOpacityEffect,
-    QComboBox
+    QComboBox,
+    QCheckBox,
+    QInputDialog
 )
 
 from urllib.parse import quote
@@ -65,6 +72,12 @@ class RemoteTouchApp(QMainWindow):
 
         self.funnel_process = None
         self.internet_address = ""
+        self.discovery_stop = threading.Event()
+        self.discovery_thread = None
+        self.pair_code = ""
+        self.directory_timer = QTimer(self)
+        self.directory_timer.timeout.connect(self.register_directory)
+        self.directory_timer.start(30000)
 
         self.setWindowTitle("RemoteTouch")
         self.setMinimumSize(820, 740)
@@ -247,7 +260,7 @@ class RemoteTouchApp(QMainWindow):
         brand = QLabel("RemoteTouch")
         brand.setObjectName("brand")
 
-        version = QLabel("DESKTOP CONTROL CENTER  •  0.9.0")
+        version = QLabel("DESKTOP CONTROL CENTER  •  1.2.0")
         version.setObjectName("version")
 
         brand_col.addWidget(brand)
@@ -371,6 +384,28 @@ class RemoteTouchApp(QMainWindow):
 
         cl.addWidget(self.stop_internet_btn)
 
+        self.auto_trust_check = QCheckBox(
+            "Автоматически разрешать доверенным устройствам"
+        )
+        self.auto_trust_check.setStyleSheet(
+            "color: #c5d5eb; font-size: 12px; padding: 5px;"
+        )
+        self.auto_trust_check.setChecked(
+            remote_server.PAIRING.auto_allow_trusted()
+        )
+        self.auto_trust_check.toggled.connect(
+            remote_server.PAIRING.set_auto_allow_trusted
+        )
+        cl.addWidget(self.auto_trust_check)
+
+        self.trusted_devices_btn = QPushButton(
+            "УПРАВЛЕНИЕ ДОВЕРЕННЫМИ УСТРОЙСТВАМИ"
+        )
+        self.trusted_devices_btn.clicked.connect(
+            self.manage_trusted_devices
+        )
+        cl.addWidget(self.trusted_devices_btn)
+
         cl.addSpacing(6)
 
         cl.addWidget(
@@ -449,6 +484,18 @@ class RemoteTouchApp(QMainWindow):
 
         rl.addWidget(self.pin_label)
 
+        self.code_label = QLabel("КОД ПОДКЛЮЧЕНИЯ: —")
+        self.code_label.setObjectName("pin")
+        self.code_label.setAlignment(Qt.AlignCenter)
+        self.code_label.setStyleSheet("color:#86efac;font-size:24px;font-weight:800;letter-spacing:4px;")
+        rl.addWidget(self.code_label)
+
+        code_hint = QLabel("Для подключения из интернета включи кнопку «ОТКРЫТЬ ДОСТУП ИЗ ИНТЕРНЕТА».")
+        code_hint.setObjectName("muted")
+        code_hint.setWordWrap(True)
+        code_hint.setAlignment(Qt.AlignCenter)
+        rl.addWidget(code_hint)
+
         buttons = QHBoxLayout()
 
         self.copy_btn = QPushButton("⧉  Копировать ссылку")
@@ -522,6 +569,94 @@ class RemoteTouchApp(QMainWindow):
         self.pulse.setEasingCurve(QEasingCurve.InOutSine)
         self.pulse.setLoopCount(-1)
         self.pulse.start()
+
+        self.pairing_prompt_active = False
+        self.pairing_timer = QTimer(self)
+        self.pairing_timer.timeout.connect(self.check_pairing_requests)
+        self.pairing_timer.start(900)
+
+    def manage_trusted_devices(self):
+        devices = remote_server.PAIRING.trusted_devices()
+        if not devices:
+            QMessageBox.information(
+                self,
+                "Доверенные устройства",
+                "Пока нет сохранённых доверенных устройств."
+            )
+            return
+
+        labels = [
+            f'{item["name"]} • {item["device_id"][:8]}'
+            for item in devices
+        ]
+        selected, accepted = QInputDialog.getItem(
+            self,
+            "Доверенные устройства",
+            "Выбери устройство для отзыва доступа:",
+            labels,
+            0,
+            False
+        )
+        if not accepted:
+            return
+
+        index = labels.index(selected)
+        device = devices[index]
+        answer = QMessageBox.question(
+            self,
+            "Отозвать доступ",
+            f'Удалить доверие для устройства «{device["name"]}»?'
+        )
+        if answer == QMessageBox.Yes:
+            remote_server.PAIRING.revoke_device(device["device_id"])
+            QMessageBox.information(
+                self,
+                "Готово",
+                "Доверие удалено. Активные сессии этого устройства закрыты."
+            )
+
+    def check_pairing_requests(self):
+        """Ask the computer owner before granting a new device access."""
+        if not self.httpd or self.pairing_prompt_active:
+            return
+
+        requests = remote_server.PAIRING.pending_requests()
+        if not requests:
+            return
+
+        self.pairing_prompt_active = True
+        try:
+            for request in requests:
+                box = QMessageBox(self)
+                box.setWindowTitle("Запрос RemoteTouch")
+                box.setIcon(QMessageBox.Question)
+                box.setText(
+                    "Устройство просит доступ к компьютеру:\n\n"
+                    + request["device_name"]
+                    + "\n\nРазрешить управление экраном и мышью?"
+                )
+                box.setInformativeText(
+                    "Если устройство ваше, можно добавить его в доверенные."
+                )
+                box.setStandardButtons(
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                box.button(QMessageBox.Yes).setText("Разрешить")
+                box.button(QMessageBox.No).setText("Отклонить")
+
+                trust = QCheckBox("Запомнить устройство и доверять ему")
+                box.setCheckBox(trust)
+
+                answer = box.exec()
+                if answer == QMessageBox.Yes:
+                    remote_server.PAIRING.approve(
+                        request["request_id"],
+                        trust_device=trust.isChecked()
+                    )
+                else:
+                    remote_server.PAIRING.deny(request["request_id"])
+        finally:
+            self.pairing_prompt_active = False
 
     def make_info(self, symbol, title, subtitle):
         row = QWidget()
@@ -599,12 +734,23 @@ class RemoteTouchApp(QMainWindow):
 
             self.server_thread.start()
 
+            # Обнаружение компьютера приложением RemoteTouch в той же Wi-Fi сети.
+            self.discovery_stop.clear()
+            self.discovery_thread = threading.Thread(
+                target=self.broadcast_discovery,
+                daemon=True
+            )
+            self.discovery_thread.start()
+
             remote_server.set_mode(
                 self.mode_combo.currentData(),
                 funnel=False
             )
 
             ip = local_ip()
+
+            self.pair_code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(4))
+            self.code_label.setText("КОД ПОДКЛЮЧЕНИЯ: " + self.pair_code)
 
             self.address = (
                 f"http://{ip}:{remote_server.PORT}/"
@@ -737,6 +883,30 @@ class RemoteTouchApp(QMainWindow):
                 "Проверь Tailscale и его настройки."
             )
 
+    def register_directory(self):
+        if not self.internet_address or not self.pair_code:
+            return
+        payload = json.dumps({
+            "code": self.pair_code,
+            "url": self.internet_address.split("?pin=", 1)[0],
+            "pin": remote_server.PIN
+        }).encode("utf-8")
+
+        def send():
+            try:
+                req = urllib.request.Request(
+                    "https://remotetouch-directory.onrender.com/api/register",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    response.read()
+            except Exception:
+                pass
+
+        threading.Thread(target=send, daemon=True).start()
+
     # Получение публичной ссылки
     def on_funnel_output(self):
         if not self.funnel_process:
@@ -759,6 +929,7 @@ class RemoteTouchApp(QMainWindow):
                 + "/?pin="
                 + quote(remote_server.PIN)
             )
+            self.register_directory()
 
             remote_server.set_mode(
                 self.mode_combo.currentData(),
@@ -922,8 +1093,31 @@ class RemoteTouchApp(QMainWindow):
         if link:
             webbrowser.open(link)
 
+    # Объявление компьютера в локальной сети для мобильного приложения.
+    def broadcast_discovery(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            while not self.discovery_stop.is_set():
+                packet = json.dumps({
+                    "type": "remotetouch_discovery",
+                    "name": socket.gethostname(),
+                    "url": self.address,
+                    "version": 1
+                }).encode("utf-8")
+                try:
+                    if self.address:
+                        sock.sendto(packet, ("255.255.255.255", 8766))
+                except OSError:
+                    pass
+                self.discovery_stop.wait(2.0)
+        finally:
+            sock.close()
+
     # Остановка сервера
     def stop_server(self):
+        self.discovery_stop.set()
+        self.discovery_thread = None
         self.stop_funnel()
 
         if self.httpd:
@@ -936,6 +1130,8 @@ class RemoteTouchApp(QMainWindow):
 
         self.url_label.setText("http://—:8765")
         self.pin_label.setText("PIN: —")
+        self.pair_code = ""
+        self.code_label.setText("КОД ПОДКЛЮЧЕНИЯ: —")
 
         self.qr_label.clear()
         self.qr_label.setText("Сначала запусти сервер")

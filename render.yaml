@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: remotetouch-directory
+    runtime: python
+    rootDir: directory
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    plan: free
+    healthCheckPath: /health

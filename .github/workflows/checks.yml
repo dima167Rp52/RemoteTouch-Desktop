@@ -1,0 +1,29 @@
+name: RemoteTouch Desktop checks
+
+on:
+  push:
+    branches:
+      - main
+      - remotetouch-v2-desktop
+  pull_request:
+    branches:
+      - main
+      - remotetouch-v2-desktop
+
+jobs:
+  python-checks:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Compile Python files
+        run: python -m compileall -q .
+
+      - name: Run pairing tests
+        run: python -m unittest discover -s tests -v
