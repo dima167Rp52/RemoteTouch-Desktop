@@ -723,22 +723,12 @@ function sendMove(x,y) {
 
     if (!rect.width || !rect.height) return;
 
-    // object-fit:contain may leave black bars around the actual desktop image.
-    // Map touches only against the visible image area, not the full preview box.
-    const sourceWidth = image.naturalWidth || rect.width;
-    const sourceHeight = image.naturalHeight || rect.height;
-    const scale = Math.min(rect.width/sourceWidth, rect.height/sourceHeight);
-    const contentWidth = sourceWidth*scale;
-    const contentHeight = sourceHeight*scale;
-    const offsetX = (rect.width-contentWidth)/2;
-    const offsetY = (rect.height-contentHeight)/2;
-
-    const nx = Math.max(0,Math.min(1,(x-offsetX)/contentWidth));
-    const ny = Math.max(0,Math.min(1,(y-offsetY)/contentHeight));
+    const nx = Math.max(0,Math.min(1,x/rect.width));
+    const ny = Math.max(0,Math.min(1,y/rect.height));
 
     cursor.style.display = "block";
-    cursor.style.left = (offsetX+nx*contentWidth)+"px";
-    cursor.style.top = (offsetY+ny*contentHeight)+"px";
+    cursor.style.left = (nx*rect.width)+"px";
+    cursor.style.top = (ny*rect.height)+"px";
 
     pendingMove = {x:nx,y:ny};
     scheduleMovement();
