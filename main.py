@@ -120,10 +120,6 @@ body {
 }
 
 .controlPanel {
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:6px;
     width:100%;
     margin:0 auto 7px;
     padding:6px;
@@ -133,7 +129,26 @@ body {
     box-shadow:0 4px 14px #0005;
 }
 
-.controlPanel button {
+.panelHeading {
+    display:block;
+    width:100%;
+    height:30px;
+    margin:0 0 5px;
+    padding:0;
+    background:transparent;
+    color:#dbeafe;
+    font-size:13px;
+    letter-spacing:.3px;
+}
+
+.controlButtons {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+}
+
+.controlButtons button {
     flex:1;
     height:40px;
     min-width:0;
@@ -147,8 +162,9 @@ body {
     touch-action:none;
 }
 
-.controlPanel button:active,
-.controlPanel button.active { background:#2563eb; }
+.controlButtons button:active,
+.controlButtons button.active { background:#2563eb; }
+.controlButtons.collapsed { display:none; }
 
 #gameModeToggle { background:#166534; }
 #languageToggle { background:#0f766e; }
@@ -156,6 +172,9 @@ body {
 .screen {
     position:relative;
     width:100%;
+    height:68dvh;
+    min-height:380px;
+    max-height:820px;
     margin:0;
     overflow:hidden;
     border-radius:12px;
@@ -165,7 +184,8 @@ body {
 
 #screenImage {
     width:100%;
-    height:auto;
+    height:100%;
+    object-fit:contain;
     display:block;
     pointer-events:none;
 }
@@ -275,12 +295,12 @@ button {
     right:6px;
     bottom:6px;
     z-index:30;
-    max-height:72%;
+    max-height:68%;
     overflow-y:auto;
     overscroll-behavior:contain;
-    padding:7px;
-    border:1px solid rgba(255,255,255,.22);
-    background:rgba(15,23,42,.78);
+    padding:6px;
+    border:1px solid rgba(255,255,255,.28);
+    background:rgba(15,23,42,.58);
     border-radius:12px;
     backdrop-filter:blur(8px);
     -webkit-backdrop-filter:blur(8px);
@@ -294,20 +314,23 @@ button {
     gap:3px;
     margin-bottom:4px;
     justify-content:center;
+    min-width:0;
 }
 
 .key {
     flex:1;
     min-width:0;
-    padding:clamp(7px, 2vw, 11px) 1px;
+    padding:clamp(5px, 1.5vw, 8px) 1px;
+    min-height:34px;
     border-radius:6px;
-    background:rgba(55,65,81,.9);
+    background:rgba(55,65,81,.72);
     color:white;
     font-size:clamp(9px, 2.6vw, 13px);
 }
 
 .key.wide { flex:1.7; font-size:10px; }
 .key.space { flex:5; }
+.key:active,.key.active { background:rgba(37,99,235,.82); }
 
 .status {
     display:none;
@@ -392,9 +415,11 @@ button {
 
 @media (orientation:portrait) {
     body { padding:5px; }
-    .controlPanel { gap:4px; padding:5px; margin-bottom:5px; }
-    .controlPanel button { height:38px; font-size:19px; }
-    .screen { border-radius:10px; }
+    .controlPanel { padding:5px; margin-bottom:5px; }
+    .controlButtons { gap:4px; }
+    .controlButtons button { height:38px; font-size:19px; }
+    .screen { height:72dvh; min-height:400px; border-radius:10px; }
+    #keyboard { left:4px; right:4px; bottom:4px; max-height:66%; }
 }
 </style>
 </head>
@@ -402,13 +427,16 @@ button {
 <body>
 
 <div class="controlPanel" aria-label="Панель управления">
-    <button class="mouseHold" data-mouse="left" title="Левая кнопка мыши" aria-label="Левая кнопка мыши">◀️</button>
-    <button class="mouseHold" data-mouse="right" title="Правая кнопка мыши" aria-label="Правая кнопка мыши">▶️</button>
-    <button id="gameModeToggle" onclick="toggleGameMode()" title="Игровой режим" aria-label="Игровой режим">🎮</button>
-    <button id="languageToggle" onclick="switchLanguage()" title="Сменить язык" aria-label="Сменить язык">🌐</button>
-    <button onclick="scrollMouse(120)" title="Прокрутка вверх" aria-label="Прокрутка вверх">⬆️</button>
-    <button onclick="openSensitivity()" title="Чувствительность" aria-label="Чувствительность">🎯</button>
-    <button onclick="scrollMouse(-120)" title="Прокрутка вниз" aria-label="Прокрутка вниз">⬇️</button>
+    <button class="panelHeading" id="panelToggle" onclick="toggleControlPanel()" aria-expanded="true">⚙️ Панель управления</button>
+    <div class="controlButtons" id="controlButtons">
+        <button class="mouseHold" data-mouse="left" title="Левая кнопка мыши" aria-label="Левая кнопка мыши">◀️</button>
+        <button class="mouseHold" data-mouse="right" title="Правая кнопка мыши" aria-label="Правая кнопка мыши">▶️</button>
+        <button id="gameModeToggle" onclick="toggleGameMode()" title="Игровой режим" aria-label="Игровой режим">🎮</button>
+        <button id="languageToggle" onclick="switchLanguage()" title="Сменить язык" aria-label="Сменить язык">🌐</button>
+        <button onclick="scrollMouse(120)" title="Прокрутка вверх" aria-label="Прокрутка вверх">⬆️</button>
+        <button onclick="openSensitivity()" title="Чувствительность" aria-label="Чувствительность">🎯</button>
+        <button onclick="scrollMouse(-120)" title="Прокрутка вниз" aria-label="Прокрутка вниз">⬇️</button>
+    </div>
 </div>
 
 <div class="screen" id="screen">
@@ -503,6 +531,24 @@ button {
         <button class="key" data-key="RIGHT">→</button>
         <button class="key" data-key="SLASH">/</button>
     </div>
+    </div>
+</div>
+
+<div id="sensitivityOverlay" onclick="overlayBackgroundClick(event)">
+    <div class="sensitivityPanel">
+        <button id="sensitivityClose" onclick="closeSensitivity()" aria-label="Закрыть">✕</button>
+        <div class="sensitivityTitle">Чувствительность камеры</div>
+        <div class="sensitivityValue" id="sensitivityValue">1.6×</div>
+        <div class="sensitivityControls">
+            <button onclick="changeSensitivity(-0.1)" aria-label="Уменьшить">−</button>
+            <input id="sensitivityRange" type="range" min="0.4" max="5" step="0.1" value="1.6" oninput="setSensitivity(this.value)">
+            <button onclick="changeSensitivity(0.1)" aria-label="Увеличить">+</button>
+        </div>
+        <div class="sensitivityPresets">
+            <button onclick="setSensitivity(0.8)">Медленно</button>
+            <button onclick="setSensitivity(1.6)">Обычно</button>
+            <button onclick="setSensitivity(3)">Быстро</button>
+        </div>
     </div>
 </div>
 
@@ -821,6 +867,13 @@ document.querySelectorAll(".key[data-key]").forEach(button=>{
     button.addEventListener("lostpointercapture",release);
 });
 
+function toggleControlPanel() {
+    const controls=document.getElementById("controlButtons");
+    const heading=document.getElementById("panelToggle");
+    const collapsed=controls.classList.toggle("collapsed");
+    heading.setAttribute("aria-expanded",String(!collapsed));
+}
+
 function toggleKeyboard() {
     const keyboard=document.getElementById("keyboard");
 
@@ -856,12 +909,13 @@ screen.addEventListener("pointerdown",event=>{
             send({action:"click",button:"left"});
         },100);
     } else {
-        // В игровом режиме ЛКМ зажимается после 0,1 секунды удержания.
+        // Удержание срабатывает только если палец оставался неподвижным все 0,1 секунды.
         longPressTimer=setTimeout(()=>{
-            if(pointerStart && !longPressTriggered) {
+            if(pointerStart && !pointerMoved && !longPressTriggered) {
                 longPressTriggered=true;
                 send({action:"click",button:"left",pressed:true});
             }
+            longPressTimer=null;
         },100);
     }
 });
@@ -876,6 +930,10 @@ screen.addEventListener("pointermove",event=>{
 
     if(Math.abs(dx)+Math.abs(dy)>5) {
         pointerMoved=true;
+        if(gameMode && longPressTimer!==null) {
+            clearTimeout(longPressTimer);
+            longPressTimer=null;
+        }
     }
 
     if(gameMode) {
