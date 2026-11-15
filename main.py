@@ -172,9 +172,9 @@ body {
 .screen {
     position:relative;
     width:100%;
-    height:68dvh;
-    min-height:380px;
-    max-height:820px;
+    height:80dvh;
+    min-height:440px;
+    max-height:1000px;
     margin:0;
     overflow:hidden;
     border-radius:12px;
@@ -418,7 +418,7 @@ button {
     .controlPanel { padding:5px; margin-bottom:5px; }
     .controlButtons { gap:4px; }
     .controlButtons button { height:38px; font-size:19px; }
-    .screen { height:72dvh; min-height:400px; border-radius:10px; }
+    .screen { height:82dvh; min-height:460px; max-height:none; border-radius:10px; }
     #keyboard { left:4px; right:4px; bottom:4px; max-height:66%; }
 }
 </style>
