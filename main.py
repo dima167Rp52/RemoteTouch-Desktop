@@ -506,7 +506,7 @@ button {
     </div>
 </div>
 
-
+<div class="status" id="status">Управление готово</div>
 
 <script>
 const PIN = "TOKEN";
