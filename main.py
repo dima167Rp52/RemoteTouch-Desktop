@@ -110,28 +110,53 @@ HTML = r"""<!DOCTYPE html>
 
 body {
     margin:0;
-    padding:10px;
+    padding:7px;
     background:#111827;
     color:white;
     font-family:Arial,sans-serif;
     text-align:center;
     user-select:none;
+    -webkit-user-select:none;
 }
 
-h1 {
-    color:#60a5fa;
-    margin:6px;
+.controlPanel {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    width:100%;
+    margin:0 auto 7px;
+    padding:6px;
+    border:1px solid rgba(148,163,184,.18);
+    border-radius:13px;
+    background:rgba(30,41,59,.94);
+    box-shadow:0 4px 14px #0005;
 }
 
-.subtitle {
-    color:#94a3b8;
-    font-size:12px;
+.controlPanel button {
+    flex:1;
+    height:40px;
+    min-width:0;
+    max-width:58px;
+    padding:0;
+    border-radius:10px;
+    background:#374151;
+    color:white;
+    font-size:21px;
+    line-height:1;
+    touch-action:none;
 }
+
+.controlPanel button:active,
+.controlPanel button.active { background:#2563eb; }
+
+#gameModeToggle { background:#166534; }
+#languageToggle { background:#0f766e; }
 
 .screen {
     position:relative;
     width:100%;
-    margin-top:12px;
+    margin:0;
     overflow:hidden;
     border-radius:12px;
     background:black;
@@ -159,8 +184,8 @@ h1 {
     position:absolute;
     left:18px;
     bottom:18px;
-    width:132px;
-    height:132px;
+    width:clamp(90px, 28vw, 132px);
+    height:clamp(90px, 28vw, 132px);
     border:2px solid rgba(255,255,255,.55);
     border-radius:50%;
     background:rgba(15,23,42,.42);
@@ -184,23 +209,23 @@ h1 {
 
 #gameActionButtons {
     position:absolute;
-    right:16px;
-    bottom:20px;
+    right:12px;
+    bottom:16px;
     display:flex;
     flex-direction:column;
-    gap:14px;
+    gap:10px;
     pointer-events:auto;
 }
 
 .gameAction {
-    width:58px;
-    height:58px;
-    min-width:58px;
+    width:54px;
+    height:54px;
+    min-width:54px;
     padding:0;
     border:2px solid rgba(255,255,255,.75);
     border-radius:50%;
     background:rgba(30,41,59,.82);
-    font-size:28px;
+    font-size:27px;
     box-shadow:0 3px 12px #0008;
 }
 
@@ -217,83 +242,78 @@ h1 {
     z-index:5;
 }
 
-.buttons,.scroll-buttons {
-    display:flex;
-    gap:8px;
-    margin-top:10px;
-}
-
 button {
     border:0;
     border-radius:8px;
-    padding:12px 5px;
-    background:#374151;
     color:white;
-    font-size:14px;
     font-weight:bold;
     touch-action:none;
     min-width:0;
 }
 
-.buttons button,.scroll-buttons button {
-    flex:1;
-}
-
-button:active,button.active {
-    background:#2563eb;
-}
-
 #keyboardToggle {
-    width:100%;
-    margin-top:12px;
-    background:#2563eb;
-    padding:13px;
+    position:absolute;
+    top:8px;
+    right:8px;
+    z-index:35;
+    width:43px;
+    height:43px;
+    padding:0;
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:12px;
+    background:rgba(37,99,235,.58);
+    color:white;
+    font-size:23px;
+    backdrop-filter:blur(7px);
+    -webkit-backdrop-filter:blur(7px);
 }
 
 #keyboard {
     display:none;
-    margin-top:10px;
-    padding:8px;
-    background:#1f2937;
+    position:absolute;
+    left:6px;
+    right:6px;
+    bottom:6px;
+    z-index:30;
+    max-height:72%;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    padding:7px;
+    border:1px solid rgba(255,255,255,.22);
+    background:rgba(15,23,42,.78);
     border-radius:12px;
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
+    touch-action:pan-y;
 }
 
-#keyboard.visible {
-    display:block;
-}
+#keyboard.visible { display:block; }
 
 .keyrow {
     display:flex;
-    gap:4px;
-    margin-bottom:5px;
+    gap:3px;
+    margin-bottom:4px;
     justify-content:center;
 }
 
 .key {
     flex:1;
     min-width:0;
-    padding:12px 2px;
-    font-size:13px;
+    padding:clamp(7px, 2vw, 11px) 1px;
+    border-radius:6px;
+    background:rgba(55,65,81,.9);
+    color:white;
+    font-size:clamp(9px, 2.6vw, 13px);
 }
 
-.key.wide {
-    flex:1.7;
-    font-size:11px;
-}
-
-.key.space {
-    flex:5;
-}
-
-#languageToggle {
-    flex:1.5;
-    background:#0f766e;
-}
+.key.wide { flex:1.7; font-size:10px; }
+.key.space { flex:5; }
 
 .status {
+    display:none;
     color:#86efac;
     font-size:12px;
-    margin:12px 0;
+    margin:8px 0;
 }
 
 #sensitivityOverlay {
@@ -307,9 +327,7 @@ button:active,button.active {
     padding:20px;
 }
 
-#sensitivityOverlay.visible {
-    display:flex;
-}
+#sensitivityOverlay.visible { display:flex; }
 
 .sensitivityPanel {
     position:relative;
@@ -328,6 +346,7 @@ button:active,button.active {
     height:36px;
     padding:0;
     font-size:22px;
+    background:#374151;
 }
 
 .sensitivityTitle {
@@ -351,13 +370,12 @@ button:active,button.active {
 .sensitivityControls button {
     width:48px;
     min-width:48px;
+    padding:10px;
     font-size:20px;
+    background:#374151;
 }
 
-#sensitivityRange {
-    flex:1;
-    min-width:0;
-}
+#sensitivityRange { flex:1; min-width:0; }
 
 .sensitivityPresets {
     display:flex;
@@ -369,14 +387,29 @@ button:active,button.active {
     flex:1;
     padding:10px 3px;
     font-size:12px;
+    background:#374151;
+}
+
+@media (orientation:portrait) {
+    body { padding:5px; }
+    .controlPanel { gap:4px; padding:5px; margin-bottom:5px; }
+    .controlPanel button { height:38px; font-size:19px; }
+    .screen { border-radius:10px; }
 }
 </style>
 </head>
 
 <body>
 
-<h1>RemoteTouch</h1>
-<div class="subtitle">Version 1.0.0 • DEVICE PAIRING</div>
+<div class="controlPanel" aria-label="Панель управления">
+    <button class="mouseHold" data-mouse="left" title="Левая кнопка мыши" aria-label="Левая кнопка мыши">◀️</button>
+    <button class="mouseHold" data-mouse="right" title="Правая кнопка мыши" aria-label="Правая кнопка мыши">▶️</button>
+    <button id="gameModeToggle" onclick="toggleGameMode()" title="Игровой режим" aria-label="Игровой режим">🎮</button>
+    <button id="languageToggle" onclick="switchLanguage()" title="Сменить язык" aria-label="Сменить язык">🌐</button>
+    <button onclick="scrollMouse(120)" title="Прокрутка вверх" aria-label="Прокрутка вверх">⬆️</button>
+    <button onclick="openSensitivity()" title="Чувствительность" aria-label="Чувствительность">🎯</button>
+    <button onclick="scrollMouse(-120)" title="Прокрутка вниз" aria-label="Прокрутка вниз">⬇️</button>
+</div>
 
 <div class="screen" id="screen">
     <img id="screenImage" src="/stream?token=TOKEN">
@@ -393,57 +426,11 @@ button:active,button.active {
             <button class="gameAction" id="sneakButton" aria-label="Приседание">↓</button>
         </div>
     </div>
-</div>
 
-<div class="buttons">
-    <button class="mouseHold" data-mouse="left">ЛКМ</button>
-    <button class="mouseHold" data-mouse="right">ПКМ</button>
-</div>
+    <button id="keyboardToggle" onclick="toggleKeyboard()" title="Показать клавиатуру" aria-label="Показать клавиатуру" aria-pressed="false">⌨️</button>
 
-<div class="buttons">
-    <button id="gameModeToggle" onclick="toggleGameMode()">🎮 РЕЖИМ ИГРЫ: ВЫКЛ</button>
-</div>
+    <div id="keyboard">
 
-<div class="buttons">
-    <button id="languageToggle" onclick="switchLanguage()">🌐 RU / EN</button>
-</div>
-
-<div class="scroll-buttons">
-    <button onclick="scrollMouse(120)">▲ Вверх</button>
-    <button onclick="openSensitivity()">🎯 ЧУВСТВИТЕЛЬНОСТЬ</button>
-    <button onclick="scrollMouse(-120)">▼ Вниз</button>
-</div>
-
-<div id="sensitivityOverlay" onclick="overlayBackgroundClick(event)">
-    <div class="sensitivityPanel">
-        <button id="sensitivityClose" onclick="closeSensitivity()">×</button>
-
-        <div class="sensitivityTitle">Чувствительность камеры</div>
-
-        <div class="sensitivityValue" id="sensitivityValue">1.6×</div>
-
-        <div class="sensitivityControls">
-            <button onclick="changeSensitivity(-0.1)">−</button>
-
-            <input id="sensitivityRange" type="range"
-                   min="0.4" max="5" step="0.1"
-                   value="1.6" oninput="setSensitivity(this.value)">
-
-            <button onclick="changeSensitivity(0.1)">+</button>
-        </div>
-
-        <div class="sensitivityPresets">
-            <button onclick="setSensitivity(0.8)">0.8×</button>
-            <button onclick="setSensitivity(1.6)">1.6×</button>
-            <button onclick="setSensitivity(2.5)">2.5×</button>
-            <button onclick="setSensitivity(4)">4×</button>
-        </div>
-    </div>
-</div>
-
-<button id="keyboardToggle" onclick="toggleKeyboard()">⌨ ПОКАЗАТЬ КЛАВИАТУРУ</button>
-
-<div id="keyboard">
     <div class="keyrow">
         <button class="key" data-key="ESC">ESC</button>
         <button class="key" data-key="TAB">TAB</button>
@@ -516,9 +503,10 @@ button:active,button.active {
         <button class="key" data-key="RIGHT">→</button>
         <button class="key" data-key="SLASH">/</button>
     </div>
+    </div>
 </div>
 
-<div class="status" id="status">Управление готово</div>
+
 
 <script>
 const PIN = "TOKEN";
@@ -635,8 +623,9 @@ function updateKeyboardLabels() {
         }
     });
 
-    document.getElementById("languageToggle").textContent =
-        currentLanguage === "RU" ? "🌐 RU → EN" : "🌐 EN → RU";
+    document.getElementById("languageToggle").textContent = "🌐";
+    document.getElementById("languageToggle").title =
+        currentLanguage === "RU" ? "Русская раскладка" : "Английская раскладка";
 }
 
 function switchLanguage() {
@@ -655,9 +644,9 @@ function toggleGameMode() {
 
     const button = document.getElementById("gameModeToggle");
 
-    button.textContent = gameMode
-        ? "🎮 РЕЖИМ ИГРЫ: ВКЛ"
-        : "🎮 РЕЖИМ ИГРЫ: ВЫКЛ";
+    button.textContent = gameMode ? "🎮🟢" : "🎮";
+    button.title = gameMode ? "Выключить игровой режим" : "Включить игровой режим";
+    button.setAttribute("aria-label", button.title);
 
     button.style.background = gameMode ? "#15803d" : "#374151";
     cursor.style.display = gameMode ? "none" : "block";
@@ -837,14 +826,16 @@ function toggleKeyboard() {
 
     keyboard.classList.toggle("visible");
 
-    document.getElementById("keyboardToggle").textContent =
-        keyboard.classList.contains("visible")
-        ? "⌨ СКРЫТЬ КЛАВИАТУРУ"
-        : "⌨ ПОКАЗАТЬ КЛАВИАТУРУ";
+    const opened = keyboard.classList.contains("visible");
+    const toggle = document.getElementById("keyboardToggle");
+    toggle.textContent = opened ? "✕" : "⌨️";
+    toggle.title = opened ? "Скрыть клавиатуру" : "Показать клавиатуру";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-pressed", String(opened));
 }
 
 screen.addEventListener("pointerdown",event=>{
-    if (event.target.closest("#gameControls")) return;
+    if (event.target.closest("#gameControls, #keyboard, #keyboardToggle")) return;
     event.preventDefault();
 
     try {
@@ -1042,6 +1033,445 @@ window.addEventListener("pagehide",()=>{
 
 updateKeyboardLabels();
 </script>
+</body>
+</html>
+"""
+
+
+PAIR_HTML = r"""<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Подключение RemoteTouch</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:#0b1220;color:#edf4ff;font-family:Segoe UI,Arial,sans-serif}
+main{width:min(100%,420px);padding:28px;border:1px solid #29405f;border-radius:20px;background:#142039;box-shadow:0 20px 70px #0006}
+h1{margin:0 0 8px;color:#7dd3fc}p{color:#a8b8d0;line-height:1.5}
+input,button{width:100%;padding:14px;border:0;border-radius:10px;font-size:15px}
+input{margin:12px 0;background:#0b1527;color:white;border:1px solid #355071}
+button{background:#2563eb;color:white;font-weight:700}
+#status{min-height:24px;margin-top:14px;color:#7dd3fc;font-size:14px}
+</style></head><body><main>
+<h1>RemoteTouch</h1><p>Запроси разрешение на подключение к компьютеру. На компьютере появится окно подтверждения.</p>
+<input id="deviceName" maxlength="48" placeholder="Название устройства" autocomplete="off">
+<button id="connect">Запросить подключение</button><div id="status"></div>
+</main><script>
+const pin = new URLSearchParams(location.search).get("pin") || "";
+const statusEl = document.getElementById("status");
+const button = document.getElementById("connect");
+let requestId = "";
+function deviceId(){
+ let id=localStorage.getItem("remotetouch_device_id");
+ if(!id){
+  id=(window.crypto&&crypto.randomUUID)
+   ? crypto.randomUUID()
+   : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{
+      const r=Math.random()*16|0;
+      return (c==="x"?r:(r&3|8)).toString(16);
+     });
+  localStorage.setItem("remotetouch_device_id",id);
+ }
+ return id;
+}
+async function poll(){
+ try{
+  const r=await fetch("/pair/status?request_id="+encodeURIComponent(requestId),{cache:"no-store"});
+  const d=await r.json();
+  if(d.status==="approved"&&d.session_token){
+   statusEl.textContent="Подключено. Открываем управление…";
+   location.replace("/remote?token="+encodeURIComponent(d.session_token));
+   return;
+  }
+  if(d.status==="denied"){statusEl.textContent="Запрос отклонён на компьютере.";button.disabled=false;return}
+  if(d.status==="expired"){statusEl.textContent="Время запроса истекло. Попробуй ещё раз.";button.disabled=false;return}
+  setTimeout(poll,1200);
+ }catch(e){statusEl.textContent="Нет связи с компьютером.";setTimeout(poll,2500)}
+}
+button.addEventListener("click",async()=>{
+ const name=document.getElementById("deviceName").value.trim()||"Телефон";
+ button.disabled=true;statusEl.textContent="Отправляем запрос…";
+ try{
+  const r=await fetch("/pair/request",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin,device_id:deviceId(),device_name:name})});
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.error||"Не удалось отправить запрос");
+  if(d.status==="approved"&&d.session_token){location.replace("/remote?token="+encodeURIComponent(d.session_token));return}
+  requestId=d.request_id;statusEl.textContent="Ожидаем подтверждения на компьютере…";poll();
+ }catch(e){statusEl.textContent=e.message;button.disabled=false}
+});
+</script></body></html>"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def authorized(self):
+        query = parse_qs(urlparse(self.path).query)
+        supplied = query.get("token", [""])[0]
+        return PAIRING.authenticate(supplied)
+
+    def send_json(self, status, payload):
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_bytes(status, "application/json; charset=utf-8", data)
+
+    def send_bytes(self, status, content_type, data):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        if path == "/":
+            supplied = query.get("pin", [""])[0]
+            if not secrets.compare_digest(supplied, PIN):
+                self.send_error(403)
+                return
+            self.send_bytes(200, "text/html; charset=utf-8", PAIR_HTML.encode("utf-8"))
+            return
+
+        if path == "/pair/status":
+            request_id = query.get("request_id", [""])[0]
+            self.send_json(200, PAIRING.pairing_status(request_id))
+            return
+
+        if path == "/remote":
+            if not self.authorized():
+                self.send_error(403)
+                return
+            token = query.get("token", [""])[0]
+            page = HTML.replace("TOKEN", token).encode("utf-8")
+            self.send_bytes(200, "text/html; charset=utf-8", page)
+            return
+
+        if not self.authorized():
+            self.send_error(403)
+            return
+
+        if path == "/app/status":
+            self.send_json(200, {"remote_enabled": is_remote_enabled()})
+            return
+
+        if path == "/settings":
+            profile = get_profile()
+            data = json.dumps(profile).encode("utf-8")
+
+            self.send_bytes(
+                200,
+                "application/json; charset=utf-8",
+                data
+            )
+            return
+
+        if path == "/stream":
+            if not is_remote_enabled():
+                self.send_error(409, "Remote streaming is stopped")
+                return
+            self.send_response(200)
+
+            self.send_header(
+                "Content-Type",
+                "multipart/x-mixed-replace; boundary=frame"
+            )
+
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+
+            self.close_connection = True
+
+            try:
+                with mss.mss() as capture:
+                    monitor = capture.monitors[1]
+
+                    while is_remote_enabled():
+                        start = time.perf_counter()
+
+                        shot = capture.grab(monitor)
+
+                        frame = Image.frombytes(
+                            "RGB",
+                            shot.size,
+                            shot.rgb
+                        )
+
+                        profile = get_profile()
+
+                        frame.thumbnail(
+                            profile["size"],
+                            Image.Resampling.BILINEAR
+                        )
+
+                        buffer = io.BytesIO()
+
+                        frame.save(
+                            buffer,
+                            format="JPEG",
+                            quality=profile["quality"],
+                            optimize=False
+                        )
+
+                        data = buffer.getvalue()
+
+                        self.wfile.write(b"--frame\r\n")
+                        self.wfile.write(
+                            b"Content-Type: image/jpeg\r\n"
+                        )
+
+                        self.wfile.write(
+                            f"Content-Length: {len(data)}\r\n\r\n".encode()
+                        )
+
+                        self.wfile.write(data)
+                        self.wfile.write(b"\r\n")
+                        self.wfile.flush()
+
+                        delay = (
+                            1 / profile["fps"]
+                            - (time.perf_counter() - start)
+                        )
+
+                        if delay > 0:
+                            time.sleep(delay)
+
+            except (
+                BrokenPipeError,
+                ConnectionResetError,
+                ConnectionAbortedError,
+                OSError
+            ):
+                pass
+
+            return
+
+        self.send_error(404)
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+
+        if path == "/pair/request":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    self.send_error(400)
+                    return
+                payload = json.loads(self.rfile.read(length))
+                supplied_pin = str(payload.get("pin", ""))
+                if not secrets.compare_digest(supplied_pin, PIN):
+                    self.send_json(403, {"error": "Неверный PIN"})
+                    return
+                result = PAIRING.request_pairing(
+                    payload.get("device_id"),
+                    payload.get("device_name"),
+                )
+                self.send_json(200, result)
+            except (ValueError, TypeError, json.JSONDecodeError, RuntimeError) as exc:
+                self.send_json(400, {"error": str(exc)})
+            return
+
+        if path in ("/app/remote/start", "/app/remote/stop"):
+            if not self.authorized():
+                self.send_error(403)
+                return
+            set_remote_enabled(path.endswith("/start"))
+            self.send_json(200, {"remote_enabled": is_remote_enabled()})
+            return
+
+        if path != "/control":
+            self.send_error(404)
+            return
+
+        if not self.authorized():
+            self.send_error(403)
+            return
+
+        if not is_remote_enabled():
+            self.send_error(409, "Remote control is stopped")
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+
+            if length <= 0 or length > 4096:
+                self.send_error(400)
+                return
+
+            command = json.loads(self.rfile.read(length))
+            action = command.get("action")
+
+            if action == "move":
+                x = float(command["x"])
+                y = float(command["y"])
+
+                if not math.isfinite(x) or not math.isfinite(y):
+                    self.send_error(400)
+                    return
+
+                x = max(0, min(1, x))
+                y = max(0, min(1, y))
+
+                width = user32.GetSystemMetrics(0)
+                height = user32.GetSystemMetrics(1)
+
+                user32.SetCursorPos(
+                    round(x * (width - 1)),
+                    round(y * (height - 1))
+                )
+
+            elif action == "look":
+                dx = max(-500, min(500, int(command.get("dx", 0))))
+                dy = max(-500, min(500, int(command.get("dy", 0))))
+
+                user32.mouse_event(0x0001, dx, dy, 0, 0)
+
+            elif action == "click":
+                button = command.get("button")
+
+                flags = {
+                    "left": (0x0002, 0x0004),
+                    "right": (0x0008, 0x0010)
+                }
+
+                if button not in flags:
+                    self.send_error(400)
+                    return
+
+                down, up = flags[button]
+
+                if "pressed" in command:
+                    pressed = command["pressed"]
+
+                    if not isinstance(pressed, bool):
+                        self.send_error(400)
+                        return
+
+                    user32.mouse_event(
+                        down if pressed else up,
+                        0, 0, 0, 0
+                    )
+                else:
+                    user32.mouse_event(down, 0, 0, 0, 0)
+                    user32.mouse_event(up, 0, 0, 0, 0)
+
+            elif action == "scroll":
+                delta = int(command["delta"])
+
+                if delta not in (-120, 120):
+                    self.send_error(400)
+                    return
+
+                user32.mouse_event(0x0800, 0, 0, delta, 0)
+
+            elif action == "layout":
+                user32.keybd_event(0x5B, 0, 0, 0)
+                user32.keybd_event(0x20, 0, 0, 0)
+                user32.keybd_event(0x20, 0, 0x0002, 0)
+                user32.keybd_event(0x5B, 0, 0x0002, 0)
+
+            elif action == "key":
+                name = str(command["key"]).upper()
+                pressed = command["pressed"]
+
+                if not isinstance(pressed, bool):
+                    self.send_error(400)
+                    return
+
+                if name == "SLASH_RU":
+                    if pressed:
+                        user32.keybd_event(0x10, 0, 0, 0)
+                        user32.keybd_event(0x37, 0, 0, 0)
+                        user32.keybd_event(0x37, 0, 0x0002, 0)
+                        user32.keybd_event(0x10, 0, 0x0002, 0)
+
+                elif name == "SLASH_EN":
+                    user32.keybd_event(
+                        0xBF,
+                        0,
+                        0 if pressed else 0x0002,
+                        0
+                    )
+
+                elif name in KEYS:
+                    user32.keybd_event(
+                        KEYS[name],
+                        0,
+                        0 if pressed else 0x0002,
+                        0
+                    )
+
+                elif len(name) == 1 and name.isascii() and name.isalnum():
+                    user32.keybd_event(
+                        ord(name),
+                        0,
+                        0 if pressed else 0x0002,
+                        0
+                    )
+
+                else:
+                    self.send_error(400)
+                    return
+
+            else:
+                self.send_error(400)
+                return
+
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.send_header("Connection", "close")
+            self.end_headers()
+
+            self.close_connection = True
+
+        except (
+            ValueError,
+            TypeError,
+            KeyError,
+            json.JSONDecodeError,
+            OSError
+        ):
+            self.send_error(400)
+
+    def log_message(self, format, *args):
+        pass
+
+
+def get_local_ip():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    try:
+        sock.connect(("192.0.2.1", 80))
+        return sock.getsockname()[0]
+
+    except OSError:
+        return "127.0.0.1"
+
+    finally:
+        sock.close()
+
+
+if __name__ == "__main__":
+    server = ThreadingHTTPServer(
+        ("0.0.0.0", PORT),
+        Handler
+    )
+
+    server.daemon_threads = True
+
+    print("RemoteTouch 1.0.0")
+    print(f"Pairing address: http://{get_local_ip()}:{PORT}/?pin={PIN}")
+    print("PIN is only used to request a new device pairing.")
+
+    try:
+        server.serve_forever()
+
+    except KeyboardInterrupt:
+        print("RemoteTouch stopped.")
+
+    finally:
+        server.server_close()
 </body>
 </html>
 """
