@@ -133,17 +133,15 @@ body {
 }
 
 .panelHeading {
-    flex:0 0 96px;
+    flex:0 0 38px;
     display:block;
-    width:96px;
+    width:38px;
     height:38px;
     margin:0;
-    padding:0 3px;
+    padding:0;
     background:transparent;
     color:#dbeafe;
-    font-size:12px;
-    letter-spacing:.1px;
-    white-space:nowrap;
+    font-size:21px;
 }
 
 .controlButtons {
@@ -423,7 +421,7 @@ button {
 @media (orientation:portrait) {
     body { padding:4px; }
     .controlPanel { padding:3px; margin-bottom:4px; gap:3px; }
-    .panelHeading { flex-basis:92px; width:92px; font-size:11px; }
+    .panelHeading { flex-basis:36px; width:36px; height:36px; font-size:19px; }
     .controlButtons { gap:2px; }
     .controlButtons button { height:36px; font-size:17px; border-radius:8px; }
     .screen { height:calc(100dvh - 62px); min-height:460px; max-height:none; border-radius:10px; }
@@ -435,7 +433,7 @@ button {
 <body>
 
 <div class="controlPanel" aria-label="Панель управления">
-    <button class="panelHeading" id="panelToggle" onclick="toggleControlPanel()" aria-expanded="true">⚙️ Панель управления</button>
+    <button class="panelHeading" id="panelToggle" onclick="toggleControlPanel()" aria-expanded="true" title="Панель управления" aria-label="Панель управления">⚙️</button>
     <div class="controlButtons" id="controlButtons">
         <button class="mouseHold" data-mouse="left" title="Левая кнопка мыши" aria-label="Левая кнопка мыши">◀️</button>
         <button class="mouseHold" data-mouse="right" title="Правая кнопка мыши" aria-label="Правая кнопка мыши">▶️</button>
@@ -725,12 +723,22 @@ function sendMove(x,y) {
 
     if (!rect.width || !rect.height) return;
 
-    const nx = Math.max(0,Math.min(1,x/rect.width));
-    const ny = Math.max(0,Math.min(1,y/rect.height));
+    // object-fit:contain may leave black bars around the actual desktop image.
+    // Map touches only against the visible image area, not the full preview box.
+    const sourceWidth = image.naturalWidth || rect.width;
+    const sourceHeight = image.naturalHeight || rect.height;
+    const scale = Math.min(rect.width/sourceWidth, rect.height/sourceHeight);
+    const contentWidth = sourceWidth*scale;
+    const contentHeight = sourceHeight*scale;
+    const offsetX = (rect.width-contentWidth)/2;
+    const offsetY = (rect.height-contentHeight)/2;
+
+    const nx = Math.max(0,Math.min(1,(x-offsetX)/contentWidth));
+    const ny = Math.max(0,Math.min(1,(y-offsetY)/contentHeight));
 
     cursor.style.display = "block";
-    cursor.style.left = (nx*rect.width)+"px";
-    cursor.style.top = (ny*rect.height)+"px";
+    cursor.style.left = (offsetX+nx*contentWidth)+"px";
+    cursor.style.top = (offsetY+ny*contentHeight)+"px";
 
     pendingMove = {x:nx,y:ny};
     scheduleMovement();
